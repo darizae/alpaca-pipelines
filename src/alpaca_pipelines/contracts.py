@@ -1,0 +1,160 @@
+"""
+Data contracts for the persistence layer and pipeline state.
+
+These models define the exact JSON shapes that alpaca-pipelines reads
+from the HPC persistence layer and writes for its own run state.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field
+
+
+# ---------------------------------------------------------------------------
+# Persistence layer contracts (read-only inputs)
+# ---------------------------------------------------------------------------
+
+
+class IndexMeta(BaseModel):
+    """Metadata block of merged_index.json."""
+
+    generated_at: str | None = None
+    n_collections: int
+    n_total_hums: int
+
+
+class IndexEntry(BaseModel):
+    """Single entry in merged_index.json."""
+
+    collection: str
+    subject_id: str
+    recording_date: str
+    recording_time: str | None
+    hum_path: str
+    hum_start_s: float
+    hum_end_s: float
+    source_quality: int
+    keep: bool
+    hum_uid: int
+
+
+class MergedIndex(BaseModel):
+    """Top-level merged_index.json structure."""
+
+    meta: IndexMeta
+    entries: list[IndexEntry]
+
+
+Classification = Literal["target", "noise"]
+SourceType = Literal["hum", "mined_source", "low_quality_hum"]
+ReviewStatus = Literal["pending", "approved", "rejected"]
+SplitName = Literal["train", "val", "test"]
+
+
+class ManifestSnippet(BaseModel):
+    """Single snippet entry in manifest.json."""
+
+    uid: int
+    filename: str
+    classification: Classification
+    source_type: SourceType
+    source_path: str
+    start_s: float
+    end_s: float
+    duration_s: float
+    quality: int | None
+    subject_id: str | None
+    recording_date: str | None
+    collection: str
+    session_key: str | None
+    recording_time: str | None = None
+    split: SplitName | None = None
+    review_status: ReviewStatus = "pending"
+
+
+class ManifestMeta(BaseModel):
+    """Metadata block of manifest.json."""
+
+    strategy_name: str
+    created_at: str
+    collection_root: str
+    merged_index_path: str
+    seed: int
+    n_snippets: int
+    n_target: int
+    n_noise: int
+    manifest_hash: str = ""
+    strategy_config: dict[str, Any] | None = None
+
+
+class DatasetManifest(BaseModel):
+    """Top-level manifest.json structure."""
+
+    meta: ManifestMeta
+    snippets: list[ManifestSnippet]
+
+
+# ---------------------------------------------------------------------------
+# Run state contracts (owned by alpaca-pipelines)
+# ---------------------------------------------------------------------------
+
+RunType = Literal["training", "prediction", "evaluation"]
+RunStatus = Literal["created", "submitted", "running", "completed", "failed", "cancelled"]
+
+
+class RunOutputs(BaseModel):
+    """Pointers to output artifacts produced by a run."""
+
+    model_path: str | None = None
+    predictions_dir: str | None = None
+    evaluation_dir: str | None = None
+    summaries_dir: str | None = None
+    tensorboard_dir: str | None = None
+    log_file: str | None = None
+
+
+class RunProgress(BaseModel):
+    """Optional progress tracking for long-running jobs."""
+
+    current_epoch: int | None = None
+    total_epochs: int | None = None
+    current_phase: str | None = None
+    best_metric_value: float | None = None
+    best_metric_name: str | None = None
+
+
+class RunState(BaseModel):
+    """Persistent state of a pipeline run, stored as run_state.json."""
+
+    run_id: str
+    run_type: RunType
+    status: RunStatus = "created"
+    created_at: str
+    submitted_at: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    spec: dict[str, Any] = Field(default_factory=dict)
+    outputs: RunOutputs = Field(default_factory=RunOutputs)
+    progress: RunProgress = Field(default_factory=RunProgress)
+    error_message: str | None = None
+    slurm_job_id: str | None = None
+    run_dir: str = ""
+
+
+# ---------------------------------------------------------------------------
+# Directory name constants
+# ---------------------------------------------------------------------------
+
+SNIPPETS_DIR: str = "snippets"
+SPLITS_DIR: str = "splits"
+MANIFEST_FILENAME: str = "manifest.json"
+RUN_STATE_FILENAME: str = "run_state.json"
+LOGS_DIR: str = "logs"
+OUTPUTS_DIR: str = "outputs"
+SLURM_DIR: str = "slurm"
+MODEL_DIR: str = "model"
+PREDICTIONS_DIR: str = "predictions"
+EVALUATION_DIR: str = "evaluation"
+SUMMARIES_DIR: str = "summaries"

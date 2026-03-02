@@ -1,0 +1,18 @@
+{
+  "model_path": "/path/to/runs/training/<run_id>/outputs/model/trained_model.pt",
+  "mode": "tape",
+  "audio_files": [
+    "/path/to/audio/tape_001.wav",
+    "/path/to/audio/tape_002.wav"
+  ],
+  "sequence_length_ms": 1280,
+  "hop_ms": 640,
+  "batch_size": 16,
+  "num_workers": 4,
+  "use_cuda": true,
+  "detection_threshold": 0.5,
+  "merge_overlapping": true,
+  "min_detection_duration_s": 0.0,
+  "apply_rf_filter": false,
+  "run_name": "tape_prediction_001"
+}

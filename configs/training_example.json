@@ -1,0 +1,60 @@
+{
+  "dataset_name": "clipwise_balanced_nph_2",
+  "run_name": "resnet18_baseline",
+  "sequence_length": 128,
+  "spectrogram": {
+    "sample_rate": 44100,
+    "preemphasis": 0.98,
+    "n_fft": 4096,
+    "hop_length": 441,
+    "n_freq_bins": 256,
+    "f_min": 500,
+    "f_max": 10000,
+    "freq_compression": "linear",
+    "min_level_db": -100,
+    "ref_level_db": 20
+  },
+  "normalization": {
+    "mode": "db",
+    "min_level_db": -100,
+    "ref_level_db": 20
+  },
+  "augmentation": {
+    "enabled": true,
+    "amplitude_increase_db": 3,
+    "amplitude_decrease_db": -6,
+    "time_stretch_from": 0.5,
+    "time_stretch_to": 2.0,
+    "pitch_shift_from": 0.5,
+    "pitch_shift_to": 1.5,
+    "noise_files": [],
+    "noise_min_snr": 12,
+    "noise_max_snr": -3
+  },
+  "encoder": {
+    "input_channels": 1,
+    "conv_kernel_size": 7,
+    "max_pool": 1,
+    "resnet_size": 18
+  },
+  "classifier": {
+    "pooling": "avg",
+    "num_classes": 2
+  },
+  "training": {
+    "max_epochs": 500,
+    "batch_size": 16,
+    "num_workers": 4,
+    "learning_rate": 1e-5,
+    "beta1": 0.5,
+    "lr_patience_epochs": 8,
+    "lr_decay_factor": 0.5,
+    "early_stopping_patience_epochs": 20,
+    "epochs_per_eval": 2,
+    "val_metric": "accuracy",
+    "val_metric_mode": "max",
+    "use_cuda": true,
+    "pin_memory": true
+  },
+  "positive_class": "target"
+}

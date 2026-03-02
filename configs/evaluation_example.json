@@ -1,0 +1,7 @@
+{
+  "prediction_run_id": "<prediction-run-uuid>",
+  "dataset_name": "clipwise_balanced_nph_2",
+  "detection_thresholds": [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+  "split": "test",
+  "run_name": "eval_resnet18_baseline"
+}

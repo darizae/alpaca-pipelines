@@ -1,0 +1,16 @@
+{
+  "partition": "gpu",
+  "nodes": 1,
+  "ntasks": 1,
+  "cpus_per_task": 4,
+  "gpus": 1,
+  "gpu_type": null,
+  "memory_gb": 32,
+  "time_limit": "24:00:00",
+  "account": null,
+  "conda_env": null,
+  "venv_path": "/path/to/alpaca-pipelines/.venv",
+  "modules": ["CUDA/12.1"],
+  "extra_sbatch_lines": [],
+  "extra_env_vars": {}
+}
