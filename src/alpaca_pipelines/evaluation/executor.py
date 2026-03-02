@@ -238,7 +238,13 @@ def execute_evaluation(
         )
 
         dataset_dir = environment.resolve_dataset_dir(spec.dataset_name)
-        dataset_handle = load_dataset_handle(dataset_dir)
+        dataset_handle = load_dataset_handle(dataset_dir, environment.collection_root)
+
+        if dataset_handle.num_classes != 2:
+            raise ValueError(
+                "Evaluation threshold sweep requires a binary dataset (2 classes). "
+                "Got {} classes: {}".format(dataset_handle.num_classes, dataset_handle.classes)
+            )
 
         model_path: str | None = None
         if spec.prediction_run_id is not None:

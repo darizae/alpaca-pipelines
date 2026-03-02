@@ -80,7 +80,8 @@ def export_detections_to_selection_table(
     detections = prediction_data.get("detections", [])
 
     selection_rows: list[dict[str, object]] = []
-    for index, detection in enumerate(detections):
+    selection_counter = 1
+    for detection in detections:
         if use_rf_filtered and not detection.get("rf_pass", True):
             continue
 
@@ -88,7 +89,7 @@ def export_detections_to_selection_table(
 
         selection_rows.append(
             {
-                "Selection": index + 1,
+                "Selection": selection_counter,
                 "View": "Spectrogram 1",
                 "Channel": 1,
                 "Begin Time (s)": detection["start_s"],
@@ -98,6 +99,7 @@ def export_detections_to_selection_table(
                 "Score": score,
             }
         )
+        selection_counter += 1
 
     table = pd.DataFrame(selection_rows)
     output_path.parent.mkdir(parents=True, exist_ok=True)
