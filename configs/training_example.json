@@ -1,21 +1,21 @@
 {
   "dataset_name": "clipwise_balanced_nph_2",
-  "run_name": "resnet18_baseline",
-  "sequence_length": 128,
+  "run_name": "resnet18_clipwise_balanced_nph_2_seq400_minmax",
+  "sequence_length": 400,
   "spectrogram": {
-    "sample_rate": 44100,
+    "sample_rate": 48000,
     "preemphasis": 0.98,
-    "n_fft": 4096,
-    "hop_length": 441,
-    "n_freq_bins": 256,
-    "f_min": 500,
-    "f_max": 10000,
+    "n_fft": 2048,
+    "hop_length": 1024,
+    "n_freq_bins": 128,
+    "f_min": 0,
+    "f_max": 4000,
     "freq_compression": "linear",
     "min_level_db": -100,
     "ref_level_db": 20
   },
   "normalization": {
-    "mode": "db",
+    "mode": "min_max",
     "min_level_db": -100,
     "ref_level_db": 20
   },
@@ -34,7 +34,7 @@
   "encoder": {
     "input_channels": 1,
     "conv_kernel_size": 7,
-    "max_pool": 1,
+    "max_pool": 2,
     "resnet_size": 18
   },
   "classifier": {
@@ -42,19 +42,20 @@
     "num_classes": 2
   },
   "training": {
-    "max_epochs": 500,
+    "max_epochs": 40,
     "batch_size": 16,
     "num_workers": 4,
     "learning_rate": 1e-5,
     "beta1": 0.5,
     "lr_patience_epochs": 8,
     "lr_decay_factor": 0.5,
-    "early_stopping_patience_epochs": 20,
+    "early_stopping_patience_epochs": 10,
     "epochs_per_eval": 2,
     "val_metric": "accuracy",
     "val_metric_mode": "max",
     "use_cuda": true,
     "pin_memory": true
   },
+  "cache_dir": null,
   "positive_class": "target"
 }
