@@ -15,6 +15,7 @@ from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState, RunStatus, RunType
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
+from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.slurm.generator import generate_slurm_script
@@ -71,6 +72,14 @@ class PipelineAPI:
             spec=spec.to_spec_dict(),
         )
 
+    def create_rf_training_run(self, spec: RfTrainingRunSpec) -> RunState:
+        """Create a new RF training run from a specification."""
+        self.environment.resolve_dataset_dir(spec.dataset_name)
+        return self.run_manager.create_run(
+            run_type="rf_training",
+            spec=spec.to_spec_dict(),
+        )
+
     # ------------------------------------------------------------------
     # Run execution
     # ------------------------------------------------------------------
@@ -104,6 +113,11 @@ class PipelineAPI:
             from alpaca_pipelines.evaluation.executor import execute_evaluation
 
             return execute_evaluation(run_state, self.environment, self.run_manager)
+
+        elif run_state.run_type == "rf_training":
+            from alpaca_pipelines.rf_training.executor import execute_rf_training
+
+            return execute_rf_training(run_state, self.environment, self.run_manager)
 
         raise ValueError("Unknown run type: {}".format(run_state.run_type))
 

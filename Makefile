@@ -55,6 +55,10 @@ create-training-run: env-check
 	@test -n "$(RUN_CONFIG)" || (echo "Usage: make create-training-run RUN_CONFIG=<path>"; exit 1)
 	@$(VENV_ACTIVATE) && alpaca-pipelines create training --config "$(RUN_CONFIG)"
 
+create-rf-training-run: env-check
+	@test -n "$(RUN_CONFIG)" || (echo "Usage: make create-rf-training-run RUN_CONFIG=<path>"; exit 1)
+	@$(VENV_ACTIVATE) && alpaca-pipelines create rf_training --config "$(RUN_CONFIG)"
+
 create-prediction-run: env-check
 	@test -n "$(RUN_CONFIG)" || (echo "Usage: make create-prediction-run RUN_CONFIG=<path>"; exit 1)
 	@$(VENV_ACTIVATE) && alpaca-pipelines create prediction --config "$(RUN_CONFIG)"
