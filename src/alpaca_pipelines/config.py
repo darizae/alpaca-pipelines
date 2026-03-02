@@ -11,7 +11,6 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-
 _REQUIRED_ENV_VARS: tuple[str, ...] = (
     "ALPACA_COLLECTION_ROOT",
     "ALPACA_MERGED_INDEX",
@@ -70,6 +69,17 @@ class PipelineEnvironment:
             raise FileNotFoundError(
                 "ALPACA_MERGED_INDEX does not exist: {}".format(self.merged_index_path)
             )
+
+        collection_root_resolved = self.collection_root.resolve()
+        merged_index_resolved = self.merged_index_path.resolve()
+        try:
+            merged_index_resolved.relative_to(collection_root_resolved)
+        except ValueError:
+            raise ValueError(
+                "ALPACA_MERGED_INDEX must be under ALPACA_COLLECTION_ROOT: {} "
+                "is not under {}".format(merged_index_resolved, collection_root_resolved)
+            ) from None
+
         if not self.datasets_root.is_dir():
             raise FileNotFoundError(
                 "ALPACA_DATASETS_ROOT does not exist: {}".format(self.datasets_root)
@@ -80,7 +90,5 @@ class PipelineEnvironment:
         """Resolve a dataset directory under ALPACA_DATASETS_ROOT."""
         dataset_dir = self.datasets_root / dataset_name
         if not dataset_dir.is_dir():
-            raise FileNotFoundError(
-                "Dataset directory does not exist: {}".format(dataset_dir)
-            )
+            raise FileNotFoundError("Dataset directory does not exist: {}".format(dataset_dir))
         return dataset_dir

@@ -197,6 +197,10 @@ class RunManager:
 
     def update_outputs(self, run_id: str, **output_updates: Any) -> RunState:
         """Update output pointers on a run."""
+        unknown_fields = set(output_updates.keys()) - set(RunOutputs.model_fields.keys())
+        if unknown_fields:
+            raise ValueError("Unknown output fields: {}".format(", ".join(sorted(unknown_fields))))
+
         state = self.find_run(run_id)
         updated_outputs = state.outputs.model_copy(update=output_updates)
         updated = state.model_copy(update={"outputs": updated_outputs})
@@ -210,8 +214,7 @@ class RunManager:
     ) -> list[RunState]:
         """List all runs, optionally filtered by type and/or status."""
         run_types: list[RunType] = (
-            [run_type] if run_type is not None
-            else ["training", "prediction", "evaluation"]
+            [run_type] if run_type is not None else ["training", "prediction", "evaluation"]
         )
         results: list[RunState] = []
         for rt in run_types:
@@ -226,9 +229,7 @@ class RunManager:
                         if status_filter is None or state.status == status_filter:
                             results.append(state)
                     except Exception as exc:
-                        logger.warning(
-                            "Corrupt run_state.json at {}: {}".format(state_path, exc)
-                        )
+                        logger.warning("Corrupt run_state.json at {}: {}".format(state_path, exc))
                         continue
         return results
 

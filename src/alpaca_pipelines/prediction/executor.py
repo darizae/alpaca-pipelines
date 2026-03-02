@@ -14,7 +14,6 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-
 from bioacoustics_dl_toolbox.audio.datasets import StridedAudioDataset
 from bioacoustics_dl_toolbox.config import (
     ClassifierConfig,
@@ -52,8 +51,9 @@ def _validate_class_to_index(class_to_index: dict[str, int]) -> None:
         )
     if "target" not in class_to_index:
         raise ValueError(
-            "Model class mapping does not contain 'target'. "
-            "Available classes: {}".format(sorted(class_to_index.keys()))
+            "Model class mapping does not contain 'target'. Available classes: {}".format(
+                sorted(class_to_index.keys())
+            )
         )
 
 
@@ -159,11 +159,13 @@ def _generate_detections(
         if target_score >= detection_threshold:
             start_seconds = window_index * hop_seconds
             end_seconds = start_seconds + window_duration_seconds
-            raw_detections.append({
-                "start_s": round(start_seconds, 4),
-                "end_s": round(end_seconds, 4),
-                "score": round(target_score, 6),
-            })
+            raw_detections.append(
+                {
+                    "start_s": round(start_seconds, 4),
+                    "end_s": round(end_seconds, 4),
+                    "score": round(target_score, 6),
+                }
+            )
 
     if not raw_detections:
         return []
@@ -181,7 +183,8 @@ def _generate_detections(
 
     if min_detection_duration_s > 0.0:
         raw_detections = [
-            detection for detection in raw_detections
+            detection
+            for detection in raw_detections
             if (detection["end_s"] - detection["start_s"]) >= min_detection_duration_s
         ]
 
@@ -207,9 +210,7 @@ def execute_prediction(
             log_dir=str(run_dir / "logs"),
         )
 
-        device = torch.device(
-            "cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu"
-        )
+        device = torch.device("cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu")
         prediction_logger.info("Device: {}".format(device))
 
         prediction_logger.info("Loading model from: {}".format(spec.model_path))
@@ -224,15 +225,15 @@ def execute_prediction(
                 ref_level_db=spec.normalization.ref_level_db,
             )
 
-        sequence_length_samples = int(
-            spec.sequence_length_ms / 1000.0 * spec_config.sample_rate
-        )
+        sequence_length_samples = int(spec.sequence_length_ms / 1000.0 * spec_config.sample_rate)
         hop_samples = int(spec.hop_ms / 1000.0 * spec_config.sample_rate)
 
         audio_files: list[str] = []
         if spec.mode == "tape":
             audio_files = list(spec.audio_files)
-        elif spec.mode == "dataset" and spec.dataset_name is not None:
+        elif spec.mode == "dataset":
+            if spec.dataset_name is None:
+                raise ValueError("Prediction mode is 'dataset' but dataset_name is not set")
             from alpaca_pipelines.dataset.loader import load_dataset_handle
 
             dataset_dir = environment.resolve_dataset_dir(spec.dataset_name)
@@ -240,14 +241,15 @@ def execute_prediction(
             for filename in dataset_handle.splits.test:
                 audio_files.append(str(dataset_handle.snippets_dir / filename))
 
+        if not audio_files:
+            raise ValueError("No audio files to predict")
+
         predictions_dir = run_dir / "outputs" / "predictions"
         all_results: list[dict[str, Any]] = []
 
         for file_index, audio_file in enumerate(audio_files):
             prediction_logger.info(
-                "Predicting [{}/{}]: {}".format(
-                    file_index + 1, len(audio_files), audio_file
-                )
+                "Predicting [{}/{}]: {}".format(file_index + 1, len(audio_files), audio_file)
             )
 
             tape_result = _predict_tape(
@@ -281,9 +283,7 @@ def execute_prediction(
             }
             all_results.append(file_result)
 
-            per_file_path = predictions_dir / "{}.json".format(
-                Path(audio_file).stem
-            )
+            per_file_path = predictions_dir / "{}.json".format(Path(audio_file).stem)
             write_json(per_file_path, file_result)
 
             run_manager.update_progress(

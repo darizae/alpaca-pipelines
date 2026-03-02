@@ -63,7 +63,8 @@ class DatasetHandle:
 
 def _extract_classes_from_manifest(manifest: DatasetManifest) -> tuple[list[str], dict[str, int]]:
     """Derive class list and mapping from manifest snippets."""
-    classifications = sorted({snippet.classification for snippet in manifest.snippets})
+    raw_classifications = sorted({snippet.classification for snippet in manifest.snippets})
+    classifications: list[str] = list(map(str, raw_classifications))
     class_to_index: dict[str, int] = {}
     if len(classifications) == 2 and "target" in classifications and "noise" in classifications:
         class_to_index = {"noise": 0, "target": 1}

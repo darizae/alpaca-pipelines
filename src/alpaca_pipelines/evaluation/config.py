@@ -26,7 +26,7 @@ class EvaluationRunSpec(BaseModel):
 
     split: Literal["train", "val", "test"] = "test"
 
-    sequence_length: int | None = None
+    sequence_length: int
     batch_size: int = 16
     num_workers: int = 4
     use_cuda: bool = True
