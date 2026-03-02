@@ -26,6 +26,11 @@ class EvaluationRunSpec(BaseModel):
 
     split: Literal["train", "val", "test"] = "test"
 
+    sequence_length: int | None = None
+    batch_size: int = 16
+    num_workers: int = 4
+    use_cuda: bool = True
+
     run_name: str = ""
 
     def to_spec_dict(self) -> dict[str, Any]:

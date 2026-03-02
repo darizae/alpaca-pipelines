@@ -20,7 +20,9 @@ def _build_sbatch_header(
 ) -> list[str]:
     """Build the #SBATCH directives section."""
     run_dir = Path(run_state.run_dir)
-    job_name = slurm_config.job_name or "{}_{}".format(run_state.run_type, run_state.run_id[:8])
+    job_name = slurm_config.job_name or "{}_{}".format(
+        run_state.run_type, run_state.run_id[:8]
+    )
 
     lines: list[str] = [
         "#!/bin/bash",

@@ -7,7 +7,7 @@ that the training and evaluation executors consume.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from alpaca_pipelines.contracts import (
@@ -73,22 +73,74 @@ def _extract_classes_from_manifest(manifest: DatasetManifest) -> tuple[list[str]
     return classifications, class_to_index
 
 
-def _load_split_file(dataset_dir: Path, split_name: str) -> list[str]:
-    """Load and validate a split CSV file."""
+def _validate_manifest_snippets(
+    manifest: DatasetManifest,
+    snippets_dir: Path,
+) -> dict[str, str]:
+    """Validate all manifest snippet entries.
+
+    Returns a mapping of filename → split (if assigned) for
+    cross-referencing with split CSV files.
+    """
+    manifest_filenames: dict[str, str] = {}
+    for snippet in manifest.snippets:
+        validate_basename(snippet.filename)
+        snippet_path = snippets_dir / snippet.filename
+        if not snippet_path.is_file():
+            raise FileNotFoundError(
+                "Snippet file listed in manifest does not exist: {}".format(snippet_path)
+            )
+        split_value = snippet.split if snippet.split is not None else ""
+        manifest_filenames[snippet.filename] = split_value
+
+    if manifest.meta.n_snippets != len(manifest.snippets):
+        raise ValueError(
+            "Manifest meta.n_snippets ({}) does not match actual snippet count ({})".format(
+                manifest.meta.n_snippets, len(manifest.snippets)
+            )
+        )
+
+    return manifest_filenames
+
+
+def _load_split_file(
+    dataset_dir: Path,
+    split_name: str,
+    snippets_dir: Path,
+    manifest_filenames: dict[str, str],
+) -> list[str]:
+    """Load and validate a split CSV file.
+
+    Checks that each filename is a safe basename, exists as a wav
+    file under snippets_dir, and appears in the manifest.
+    """
     split_path = dataset_dir / SPLITS_DIR / "{}.csv".format(split_name)
     if not split_path.is_file():
         raise FileNotFoundError("Split file not found: {}".format(split_path))
     filenames = read_csv_column(split_path)
     for filename in filenames:
         validate_basename(filename)
+        if filename not in manifest_filenames:
+            raise ValueError(
+                "Split file '{}' references '{}' which is not in the manifest".format(
+                    split_path, filename
+                )
+            )
+        snippet_path = snippets_dir / filename
+        if not snippet_path.is_file():
+            raise FileNotFoundError(
+                "Snippet file listed in {} split does not exist: {}".format(
+                    split_name, snippet_path
+                )
+            )
     return filenames
 
 
 def load_dataset_handle(dataset_dir: Path) -> DatasetHandle:
     """Load a complete dataset handle from disk.
 
-    Validates manifest, splits, and snippet directory existence.
-    Does NOT load any audio data.
+    Validates manifest, splits, snippet existence, and cross-references
+    split files against manifest entries.  Does NOT load any audio data.
     """
     if not dataset_dir.is_dir():
         raise FileNotFoundError("Dataset directory does not exist: {}".format(dataset_dir))
@@ -106,9 +158,11 @@ def load_dataset_handle(dataset_dir: Path) -> DatasetHandle:
     if not snippets_dir.is_dir():
         raise FileNotFoundError("Snippets directory not found: {}".format(snippets_dir))
 
-    train_files = _load_split_file(dataset_dir, "train")
-    val_files = _load_split_file(dataset_dir, "val")
-    test_files = _load_split_file(dataset_dir, "test")
+    manifest_filenames = _validate_manifest_snippets(manifest, snippets_dir)
+
+    train_files = _load_split_file(dataset_dir, "train", snippets_dir, manifest_filenames)
+    val_files = _load_split_file(dataset_dir, "val", snippets_dir, manifest_filenames)
+    test_files = _load_split_file(dataset_dir, "test", snippets_dir, manifest_filenames)
 
     classes, class_to_index = _extract_classes_from_manifest(manifest)
 

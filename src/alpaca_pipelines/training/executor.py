@@ -328,7 +328,7 @@ def execute_training(
 
         run_manager.update_outputs(
             run_state.run_id,
-            model_path=str(model_output_path),
+            trained_model_path=str(model_output_path),
             tensorboard_dir=summary_dir,
         )
 

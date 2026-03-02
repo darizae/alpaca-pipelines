@@ -30,11 +30,31 @@ from bioacoustics_dl_toolbox.training.checkpoints import load_model
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.io_utils import write_json
-from alpaca_pipelines.paths import validate_relative_path
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_class_to_index(class_to_index: dict[str, int]) -> None:
+    """Validate class mapping from model checkpoint.
+
+    Ensures values form a contiguous range [0..N-1] and that
+    "target" is present.
+    """
+    indices = sorted(class_to_index.values())
+    expected = list(range(len(indices)))
+    if indices != expected:
+        raise ValueError(
+            "Model class_to_index values are not contiguous [0..{}]: got {}".format(
+                len(indices) - 1, indices
+            )
+        )
+    if "target" not in class_to_index:
+        raise ValueError(
+            "Model class mapping does not contain 'target'. "
+            "Available classes: {}".format(sorted(class_to_index.keys()))
+        )
 
 
 def _load_trained_model(
@@ -47,7 +67,8 @@ def _load_trained_model(
     encoder_config = EncoderConfig(**model_dict["encoderConfig"])
     classifier_config = ClassifierConfig(**model_dict["classifierConfig"])
     spec_config = SpectrogramConfig(**model_dict["spectrogramConfig"])
-    class_dist_dict: dict[str, int] = model_dict["classes"]
+    class_to_index: dict[str, int] = model_dict["classes"]
+    _validate_class_to_index(class_to_index)
 
     encoder = ResidualEncoder(encoder_config)
     classifier = Classifier(classifier_config)
@@ -63,7 +84,7 @@ def _load_trained_model(
         ref_level_db=spec_config.ref_level_db,
     )
 
-    return model, spec_config, norm_config, class_dist_dict
+    return model, spec_config, norm_config, class_to_index
 
 
 def _predict_tape(
@@ -118,13 +139,13 @@ def _predict_tape(
 
 def _generate_detections(
     tape_result: dict[str, Any],
-    class_dist_dict: dict[str, int],
+    class_to_index: dict[str, int],
     detection_threshold: float,
     merge_overlapping: bool,
     min_detection_duration_s: float,
 ) -> list[dict[str, Any]]:
     """Convert window-level scores to time-aligned detections."""
-    target_index = class_dist_dict.get("target", 1)
+    target_index = class_to_index["target"]
     scores = tape_result["scores"]
     hop_samples = tape_result["hop_samples"]
     sample_rate = tape_result["sample_rate"]
@@ -138,13 +159,11 @@ def _generate_detections(
         if target_score >= detection_threshold:
             start_seconds = window_index * hop_seconds
             end_seconds = start_seconds + window_duration_seconds
-            raw_detections.append(
-                {
-                    "start_s": round(start_seconds, 4),
-                    "end_s": round(end_seconds, 4),
-                    "score": round(target_score, 6),
-                }
-            )
+            raw_detections.append({
+                "start_s": round(start_seconds, 4),
+                "end_s": round(end_seconds, 4),
+                "score": round(target_score, 6),
+            })
 
     if not raw_detections:
         return []
@@ -162,8 +181,7 @@ def _generate_detections(
 
     if min_detection_duration_s > 0.0:
         raw_detections = [
-            detection
-            for detection in raw_detections
+            detection for detection in raw_detections
             if (detection["end_s"] - detection["start_s"]) >= min_detection_duration_s
         ]
 
@@ -189,11 +207,13 @@ def execute_prediction(
             log_dir=str(run_dir / "logs"),
         )
 
-        device = torch.device("cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu")
+        device = torch.device(
+            "cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu"
+        )
         prediction_logger.info("Device: {}".format(device))
 
         prediction_logger.info("Loading model from: {}".format(spec.model_path))
-        model, spec_config, norm_config, class_dist_dict = _load_trained_model(
+        model, spec_config, norm_config, class_to_index = _load_trained_model(
             spec.model_path, device
         )
 
@@ -204,7 +224,9 @@ def execute_prediction(
                 ref_level_db=spec.normalization.ref_level_db,
             )
 
-        sequence_length_samples = int(spec.sequence_length_ms / 1000.0 * spec_config.sample_rate)
+        sequence_length_samples = int(
+            spec.sequence_length_ms / 1000.0 * spec_config.sample_rate
+        )
         hop_samples = int(spec.hop_ms / 1000.0 * spec_config.sample_rate)
 
         audio_files: list[str] = []
@@ -223,7 +245,9 @@ def execute_prediction(
 
         for file_index, audio_file in enumerate(audio_files):
             prediction_logger.info(
-                "Predicting [{}/{}]: {}".format(file_index + 1, len(audio_files), audio_file)
+                "Predicting [{}/{}]: {}".format(
+                    file_index + 1, len(audio_files), audio_file
+                )
             )
 
             tape_result = _predict_tape(
@@ -240,7 +264,7 @@ def execute_prediction(
 
             detections = _generate_detections(
                 tape_result=tape_result,
-                class_dist_dict=class_dist_dict,
+                class_to_index=class_to_index,
                 detection_threshold=spec.detection_threshold,
                 merge_overlapping=spec.merge_overlapping,
                 min_detection_duration_s=spec.min_detection_duration_s,
@@ -257,7 +281,9 @@ def execute_prediction(
             }
             all_results.append(file_result)
 
-            per_file_path = predictions_dir / "{}.json".format(Path(audio_file).stem)
+            per_file_path = predictions_dir / "{}.json".format(
+                Path(audio_file).stem
+            )
             write_json(per_file_path, file_result)
 
             run_manager.update_progress(
@@ -301,6 +327,11 @@ def execute_prediction(
                 sample_rate=spec_config.sample_rate,
                 environment=environment,
                 prediction_logger=prediction_logger,
+            )
+
+            run_manager.update_outputs(
+                run_state.run_id,
+                rf_filtered=True,
             )
 
         run_state = run_manager.mark_completed(run_state.run_id)

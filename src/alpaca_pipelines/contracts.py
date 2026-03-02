@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 # Persistence layer contracts (read-only inputs)
 # ---------------------------------------------------------------------------
 
-
 class IndexMeta(BaseModel):
     """Metadata block of merged_index.json."""
 
@@ -105,14 +104,21 @@ RunStatus = Literal["created", "submitted", "running", "completed", "failed", "c
 
 
 class RunOutputs(BaseModel):
-    """Pointers to output artifacts produced by a run."""
+    """Pointers to output artifacts produced by a run.
 
-    model_path: str | None = None
+    Directory pointers (``*_dir``) are set at run creation time.
+    File pointers (``trained_model_path``) are set by executors when
+    the artifact is actually produced.
+    """
+
+    trained_model_path: str | None = None
+    model_dir: str | None = None
     predictions_dir: str | None = None
     evaluation_dir: str | None = None
     summaries_dir: str | None = None
     tensorboard_dir: str | None = None
-    log_file: str | None = None
+    log_dir: str | None = None
+    rf_filtered: bool = False
 
 
 class RunProgress(BaseModel):

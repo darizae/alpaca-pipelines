@@ -120,7 +120,7 @@ print(f"Status: {status.status}")
 
 # Execute
 result = api.execute_run(run.run_id)
-print(f"Completed: {result.outputs.model_path}")
+print(f"Completed: {result.outputs.trained_model_path}")
 ```
 
 ## Run State Machine
