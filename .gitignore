@@ -1,0 +1,15 @@
+.venv/
+
+.vscode/
+
+*.egg-info/
+
+.env
+data_indexes/
+plans/
+reports/
+
+.idea/
+
+__pychache__/
+*pyc
