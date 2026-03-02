@@ -99,7 +99,7 @@ class DatasetManifest(BaseModel):
 # Run state contracts (owned by alpaca-pipelines)
 # ---------------------------------------------------------------------------
 
-RunType = Literal["training", "prediction", "evaluation"]
+RunType = Literal["training", "prediction", "evaluation", "rf_training"]
 RunStatus = Literal["created", "submitted", "running", "completed", "failed", "cancelled"]
 
 
@@ -107,11 +107,11 @@ class RunOutputs(BaseModel):
     """Pointers to output artifacts produced by a run.
 
     Directory pointers (``*_dir``) are set at run creation time.
-    File pointers (``trained_model_path``) are set by executors when
-    the artifact is actually produced.
+    File pointers are set by executors when the artifact is actually produced.
     """
 
     trained_model_path: str | None = None
+    rf_model_path: str | None = None
     model_dir: str | None = None
     predictions_dir: str | None = None
     evaluation_dir: str | None = None

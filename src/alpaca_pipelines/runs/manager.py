@@ -131,7 +131,7 @@ class RunManager:
 
     def find_run(self, run_id: str) -> RunState:
         """Find a run by ID, searching across all run types."""
-        for run_type_candidate in ("training", "prediction", "evaluation"):
+        for run_type_candidate in ("training", "prediction", "evaluation", "rf_training"):
             state_path = self._state_path(run_type_candidate, run_id)  # type: ignore[arg-type]
             if state_path.is_file():
                 return self.load_state(run_type_candidate, run_id)  # type: ignore[arg-type]
@@ -214,7 +214,9 @@ class RunManager:
     ) -> list[RunState]:
         """List all runs, optionally filtered by type and/or status."""
         run_types: list[RunType] = (
-            [run_type] if run_type is not None else ["training", "prediction", "evaluation"]
+            [run_type]
+            if run_type is not None
+            else ["training", "prediction", "evaluation", "rf_training"]
         )
         results: list[RunState] = []
         for rt in run_types:

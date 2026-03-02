@@ -1,0 +1,13 @@
+{
+  "dataset_name": "clipwise_balanced_nph_2",
+  "run_name": "rf_filter_clipwise_balanced_nph_2",
+  "positive_class": "target",
+  "random_state": 1337,
+  "n_estimators": 400,
+  "max_depth": null,
+  "min_samples_split": 2,
+  "min_samples_leaf": 1,
+  "max_features": "sqrt",
+  "class_weight": "balanced",
+  "n_jobs": -1
+}
