@@ -80,5 +80,7 @@ class PipelineEnvironment:
         """Resolve a dataset directory under ALPACA_DATASETS_ROOT."""
         dataset_dir = self.datasets_root / dataset_name
         if not dataset_dir.is_dir():
-            raise FileNotFoundError("Dataset directory does not exist: {}".format(dataset_dir))
+            raise FileNotFoundError(
+                "Dataset directory does not exist: {}".format(dataset_dir)
+            )
         return dataset_dir

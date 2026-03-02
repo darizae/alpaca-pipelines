@@ -57,7 +57,9 @@ class PipelineAPI:
         if spec.mode == "dataset" and spec.dataset_name is not None:
             self.environment.resolve_dataset_dir(spec.dataset_name)
         if not Path(spec.model_path).is_file():
-            raise FileNotFoundError("Model file not found: {}".format(spec.model_path))
+            raise FileNotFoundError(
+                "Model file not found: {}".format(spec.model_path)
+            )
         return self.run_manager.create_run(
             run_type="prediction",
             spec=spec.to_spec_dict(),
@@ -207,6 +209,8 @@ class PipelineAPI:
         evaluation_dirs = []
         for run_id in evaluation_run_ids:
             run_state = self.run_manager.find_run(run_id)
-            evaluation_dirs.append(Path(run_state.run_dir) / "outputs" / "evaluation")
+            evaluation_dirs.append(
+                Path(run_state.run_dir) / "outputs" / "evaluation"
+            )
 
         return aggregate_evaluation_results(evaluation_dirs, output_path)

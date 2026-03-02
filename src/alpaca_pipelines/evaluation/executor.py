@@ -31,7 +31,6 @@ from bioacoustics_dl_toolbox.metrics.core import (
     FPR,
     Precision,
     Recall,
-    TPR,
 )
 
 from alpaca_pipelines.config import PipelineEnvironment
@@ -42,6 +41,31 @@ from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.runs.manager import RunManager
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_target_index(class_to_index: dict[str, int]) -> int:
+    """Determine the target class index from the saved class mapping.
+
+    Hard-fails if "target" is not present in the mapping.
+    """
+    if "target" not in class_to_index:
+        raise ValueError(
+            "Model class mapping does not contain 'target'. "
+            "Available classes: {}".format(sorted(class_to_index.keys()))
+        )
+    return class_to_index["target"]
+
+
+def _validate_class_to_index(class_to_index: dict[str, int]) -> None:
+    """Validate that class_to_index values form a contiguous range [0..N-1]."""
+    indices = sorted(class_to_index.values())
+    expected = list(range(len(indices)))
+    if indices != expected:
+        raise ValueError(
+            "Model class_to_index values are not contiguous [0..{}]: got {}".format(
+                len(indices) - 1, indices
+            )
+        )
 
 
 def _evaluate_dataset_split(
@@ -55,6 +79,7 @@ def _evaluate_dataset_split(
     num_workers: int,
     device: torch.device,
     thresholds: list[float],
+    target_index: int,
 ) -> dict[str, Any]:
     """Run model inference on a dataset split and compute metrics."""
     from bioacoustics_dl_toolbox.audio.datasets import SpectrogramDataset
@@ -95,7 +120,7 @@ def _evaluate_dataset_split(
             probabilities = nn.functional.softmax(output, dim=1)
 
             predicted_classes = torch.argmax(output, dim=1)
-            target_scores = probabilities[:, 1]
+            target_scores = probabilities[:, target_index]
 
             all_labels.extend(call_labels.cpu().numpy().tolist())
             all_scores.extend(target_scores.cpu().numpy().tolist())
@@ -146,15 +171,13 @@ def _evaluate_dataset_split(
         threshold_precision.update(labels_tensor, thresholded_predictions)
         threshold_recall.update(labels_tensor, thresholded_predictions)
 
-        threshold_metrics.append(
-            {
-                "threshold": threshold,
-                "accuracy": round(threshold_accuracy.get(), 6),
-                "f1": round(threshold_f1.get(), 6),
-                "precision": round(threshold_precision.get(), 6),
-                "recall": round(threshold_recall.get(), 6),
-            }
-        )
+        threshold_metrics.append({
+            "threshold": threshold,
+            "accuracy": round(threshold_accuracy.get(), 6),
+            "f1": round(threshold_f1.get(), 6),
+            "precision": round(threshold_precision.get(), 6),
+            "recall": round(threshold_recall.get(), 6),
+        })
 
     return {
         "split": split_name,
@@ -178,6 +201,40 @@ def _evaluate_dataset_split(
             "fpr": fpr_curve.tolist(),
         },
     }
+
+
+def _resolve_sequence_length(
+    spec: EvaluationRunSpec,
+    run_manager: RunManager,
+) -> int:
+    """Determine the evaluation sequence_length.
+
+    Priority:
+    1. Explicitly set on the evaluation spec.
+    2. Loaded from the linked training/prediction run's spec.
+    3. Hard fail - no guessing.
+    """
+    if spec.sequence_length is not None:
+        return spec.sequence_length
+
+    if spec.prediction_run_id is not None:
+        prediction_state = run_manager.find_run(spec.prediction_run_id)
+        source_spec = prediction_state.spec
+
+        if "sequence_length" in source_spec:
+            return int(source_spec["sequence_length"])
+
+        training_run_id = source_spec.get("training_run_id")
+        if training_run_id is not None:
+            training_state = run_manager.find_run(training_run_id)
+            if "sequence_length" in training_state.spec:
+                return int(training_state.spec["sequence_length"])
+
+    raise ValueError(
+        "Cannot determine sequence_length for evaluation. "
+        "Set it explicitly in the evaluation spec, or link to a "
+        "training/prediction run that declares it."
+    )
 
 
 def execute_evaluation(
@@ -205,8 +262,8 @@ def execute_evaluation(
         model_path: str | None = None
         if spec.prediction_run_id is not None:
             prediction_state = run_manager.find_run(spec.prediction_run_id)
-            if prediction_state.outputs.model_path is not None:
-                model_path = prediction_state.outputs.model_path
+            if prediction_state.outputs.trained_model_path is not None:
+                model_path = prediction_state.outputs.trained_model_path
             prediction_spec = prediction_state.spec
             if model_path is None and "model_path" in prediction_spec:
                 model_path = prediction_spec["model_path"]
@@ -232,13 +289,19 @@ def execute_evaluation(
         classifier_config = ClassifierConfig(**model_dict["classifierConfig"])
         spec_config = SpectrogramConfig(**model_dict["spectrogramConfig"])
 
+        class_to_index: dict[str, int] = model_dict["classes"]
+        _validate_class_to_index(class_to_index)
+        target_index = _resolve_target_index(class_to_index)
+
         encoder = ResidualEncoder(encoder_config)
         classifier = Classifier(classifier_config)
         encoder.load_state_dict(model_dict["encoderState"])
         classifier.load_state_dict(model_dict["classifierState"])
         model = nn.Sequential(encoder, classifier)
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device(
+            "cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu"
+        )
         model = model.to(device)
         evaluation_logger.info("Device: {}".format(device))
 
@@ -247,13 +310,8 @@ def execute_evaluation(
             ref_level_db=spec_config.ref_level_db,
         )
 
-        sequence_length = int(
-            spec_config.hop_length
-            * 128
-            / spec_config.sample_rate
-            * spec_config.sample_rate
-            / spec_config.hop_length
-        )
+        sequence_length = _resolve_sequence_length(spec, run_manager)
+        evaluation_logger.info("Sequence length: {}".format(sequence_length))
 
         evaluation_logger.info("Evaluating on {} split".format(spec.split))
         results = _evaluate_dataset_split(
@@ -263,10 +321,11 @@ def execute_evaluation(
             spec_config=spec_config,
             norm_config=norm_config,
             sequence_length=sequence_length,
-            batch_size=16,
-            num_workers=4,
+            batch_size=spec.batch_size,
+            num_workers=spec.num_workers,
             device=device,
             thresholds=spec.detection_thresholds,
+            target_index=target_index,
         )
 
         evaluation_dir = run_dir / "outputs" / "evaluation"
@@ -274,6 +333,7 @@ def execute_evaluation(
             "run_id": run_state.run_id,
             "model_path": model_path,
             "dataset_name": spec.dataset_name,
+            "sequence_length": sequence_length,
             "results": results,
         }
         write_json(evaluation_dir / "evaluation_report.json", evaluation_report)

@@ -8,6 +8,7 @@ folder-based persistence under ALPACA_RUNS_ROOT.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -36,6 +37,8 @@ from alpaca_pipelines.runs.state import (
     transition_to_running,
     transition_to_submitted,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _generate_run_id() -> str:
@@ -96,11 +99,11 @@ class RunManager:
         self._scaffold_run_dirs(run_dir)
 
         outputs = RunOutputs(
-            model_path=str(run_dir / OUTPUTS_DIR / MODEL_DIR),
+            model_dir=str(run_dir / OUTPUTS_DIR / MODEL_DIR),
             predictions_dir=str(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR),
             evaluation_dir=str(run_dir / OUTPUTS_DIR / EVALUATION_DIR),
             summaries_dir=str(run_dir / OUTPUTS_DIR / SUMMARIES_DIR),
-            log_file=str(run_dir / LOGS_DIR / "run.log"),
+            log_dir=str(run_dir / LOGS_DIR),
         )
 
         state = RunState(
@@ -192,7 +195,7 @@ class RunManager:
         self._persist_state(updated)
         return updated
 
-    def update_outputs(self, run_id: str, **output_updates: str | None) -> RunState:
+    def update_outputs(self, run_id: str, **output_updates: Any) -> RunState:
         """Update output pointers on a run."""
         state = self.find_run(run_id)
         updated_outputs = state.outputs.model_copy(update=output_updates)
@@ -207,7 +210,8 @@ class RunManager:
     ) -> list[RunState]:
         """List all runs, optionally filtered by type and/or status."""
         run_types: list[RunType] = (
-            [run_type] if run_type is not None else ["training", "prediction", "evaluation"]
+            [run_type] if run_type is not None
+            else ["training", "prediction", "evaluation"]
         )
         results: list[RunState] = []
         for rt in run_types:
@@ -221,7 +225,10 @@ class RunManager:
                         state = RunState.model_validate(read_json(state_path))
                         if status_filter is None or state.status == status_filter:
                             results.append(state)
-                    except Exception:
+                    except Exception as exc:
+                        logger.warning(
+                            "Corrupt run_state.json at {}: {}".format(state_path, exc)
+                        )
                         continue
         return results
 

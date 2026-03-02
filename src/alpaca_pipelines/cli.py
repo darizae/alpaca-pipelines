@@ -122,7 +122,10 @@ def _cmd_inspect(args: argparse.Namespace) -> None:
         )
 
     outputs = run_state.outputs.model_dump()
-    non_null_outputs = {key: value for key, value in outputs.items() if value is not None}
+    non_null_outputs = {
+        key: value for key, value in outputs.items()
+        if value is not None and value is not False
+    }
     if non_null_outputs:
         print("Outputs:")
         for key, value in non_null_outputs.items():
@@ -200,7 +203,9 @@ def _build_parser() -> argparse.ArgumentParser:
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a pipeline run")
     cancel_parser.add_argument("--run-id", required=True, help="Run ID to cancel")
 
-    slurm_parser = subparsers.add_parser("generate-slurm", help="Generate a SLURM batch script")
+    slurm_parser = subparsers.add_parser(
+        "generate-slurm", help="Generate a SLURM batch script"
+    )
     slurm_parser.add_argument("--run-id", required=True, help="Run ID")
     slurm_parser.add_argument(
         "--slurm-config",
