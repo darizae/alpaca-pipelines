@@ -24,9 +24,7 @@ class SlurmConfig(BaseModel):
     error_pattern: str = "slurm-%j.err"
 
     conda_env: str | None = None
-    venv_path: str = (
-        "/cluster/projects/alpaca/repos/alpaca-pipelines/.venv"
-    )
+    venv_path: str = "/cluster/projects/alpaca/alpaca-pipelines/.venv"
     modules: list[str] = Field(default_factory=list)
 
     extra_sbatch_lines: list[str] = Field(default_factory=list)
