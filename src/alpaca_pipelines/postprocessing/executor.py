@@ -36,18 +36,20 @@ def aggregate_evaluation_results(
         results = report["results"]
         metrics = results["metrics"]
 
-        rows.append({
-            "run_id": report["run_id"],
-            "dataset": report["dataset_name"],
-            "split": results["split"],
-            "n_samples": results["n_samples"],
-            "accuracy": metrics["accuracy"],
-            "f1": metrics["f1"],
-            "precision": metrics["precision"],
-            "recall": metrics["recall"],
-            "fpr": metrics["fpr"],
-            "auc": metrics["auc"],
-        })
+        rows.append(
+            {
+                "run_id": report["run_id"],
+                "dataset": report["dataset_name"],
+                "split": results["split"],
+                "n_samples": results["n_samples"],
+                "accuracy": metrics["accuracy"],
+                "f1": metrics["f1"],
+                "precision": metrics["precision"],
+                "recall": metrics["recall"],
+                "fpr": metrics["fpr"],
+                "auc": metrics["auc"],
+            }
+        )
 
     comparison = {
         "n_runs": len(rows),
@@ -84,16 +86,18 @@ def export_detections_to_selection_table(
 
         score = detection.get("rf_score") if use_rf_filtered else detection.get("score")
 
-        selection_rows.append({
-            "Selection": index + 1,
-            "View": "Spectrogram 1",
-            "Channel": 1,
-            "Begin Time (s)": detection["start_s"],
-            "End Time (s)": detection["end_s"],
-            "Low Freq (Hz)": freq_low_hz,
-            "High Freq (Hz)": freq_high_hz,
-            "Score": score,
-        })
+        selection_rows.append(
+            {
+                "Selection": index + 1,
+                "View": "Spectrogram 1",
+                "Channel": 1,
+                "Begin Time (s)": detection["start_s"],
+                "End Time (s)": detection["end_s"],
+                "Low Freq (Hz)": freq_low_hz,
+                "High Freq (Hz)": freq_high_hz,
+                "Score": score,
+            }
+        )
 
     table = pd.DataFrame(selection_rows)
     output_path.parent.mkdir(parents=True, exist_ok=True)

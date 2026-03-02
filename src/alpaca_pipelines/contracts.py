@@ -11,10 +11,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 # ---------------------------------------------------------------------------
 # Persistence layer contracts (read-only inputs)
 # ---------------------------------------------------------------------------
+
 
 class IndexMeta(BaseModel):
     """Metadata block of merged_index.json."""

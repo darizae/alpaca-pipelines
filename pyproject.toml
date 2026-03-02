@@ -12,6 +12,7 @@ license = {text = "GPL-3.0"}
 dependencies = [
     "bioacoustics-dl-toolbox",
     "pydantic>=2.7.0",
+    "pre-commit>=3.7",
     "numpy>=1.26.0",
     "torch>=2.0.0",
     "soundfile>=0.12.1",

@@ -14,7 +14,6 @@ from typing import Any
 import joblib
 import numpy as np
 import soundfile as sf
-
 from bioacoustics_dl_toolbox.rf.features import compute_rf_features
 from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
@@ -89,9 +88,7 @@ def apply_rf_filter(
                     [features[name] for name in feature_names], dtype=np.float64
                 ).reshape(1, -1)
             else:
-                feature_vector = np.array(
-                    list(features.values()), dtype=np.float64
-                ).reshape(1, -1)
+                feature_vector = np.array(list(features.values()), dtype=np.float64).reshape(1, -1)
 
             if np.any(~np.isfinite(feature_vector)):
                 detection["rf_score"] = None
@@ -109,9 +106,7 @@ def apply_rf_filter(
         filtered_data["rf_filtered"] = True
         filtered_data["rf_model_path"] = rf_model_path
 
-        filtered_path = predictions_dir / "{}_rf_filtered.json".format(
-            Path(audio_file).stem
-        )
+        filtered_path = predictions_dir / "{}_rf_filtered.json".format(Path(audio_file).stem)
         write_json(filtered_path, filtered_data)
 
         n_passed = sum(1 for d in filtered_detections if d.get("rf_pass", False))

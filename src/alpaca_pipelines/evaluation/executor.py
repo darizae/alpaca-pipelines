@@ -14,7 +14,6 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
-
 from bioacoustics_dl_toolbox.config import (
     AugmentationConfig,
     ClassifierConfig,
@@ -26,9 +25,9 @@ from bioacoustics_dl_toolbox.logging.logger import create_logger
 from bioacoustics_dl_toolbox.metrics.auc import AUCMeter
 from bioacoustics_dl_toolbox.metrics.confusion import ConfusionMeter
 from bioacoustics_dl_toolbox.metrics.core import (
+    FPR,
     Accuracy,
     F1Score,
-    FPR,
     Precision,
     Recall,
 )
@@ -50,8 +49,9 @@ def _resolve_target_index(class_to_index: dict[str, int]) -> int:
     """
     if "target" not in class_to_index:
         raise ValueError(
-            "Model class mapping does not contain 'target'. "
-            "Available classes: {}".format(sorted(class_to_index.keys()))
+            "Model class mapping does not contain 'target'. Available classes: {}".format(
+                sorted(class_to_index.keys())
+            )
         )
     return class_to_index["target"]
 
@@ -64,6 +64,19 @@ def _validate_class_to_index(class_to_index: dict[str, int]) -> None:
         raise ValueError(
             "Model class_to_index values are not contiguous [0..{}]: got {}".format(
                 len(indices) - 1, indices
+            )
+        )
+
+
+def _validate_dataset_matches_model(
+    dataset_class_to_index: dict[str, int],
+    model_class_to_index: dict[str, int],
+) -> None:
+    if dataset_class_to_index != model_class_to_index:
+        raise ValueError(
+            "Dataset class_to_index does not match model class_to_index. "
+            "Dataset mapping: {}. Model mapping: {}.".format(
+                dataset_class_to_index, model_class_to_index
             )
         )
 
@@ -171,13 +184,15 @@ def _evaluate_dataset_split(
         threshold_precision.update(labels_tensor, thresholded_predictions)
         threshold_recall.update(labels_tensor, thresholded_predictions)
 
-        threshold_metrics.append({
-            "threshold": threshold,
-            "accuracy": round(threshold_accuracy.get(), 6),
-            "f1": round(threshold_f1.get(), 6),
-            "precision": round(threshold_precision.get(), 6),
-            "recall": round(threshold_recall.get(), 6),
-        })
+        threshold_metrics.append(
+            {
+                "threshold": threshold,
+                "accuracy": round(threshold_accuracy.get(), 6),
+                "f1": round(threshold_f1.get(), 6),
+                "precision": round(threshold_precision.get(), 6),
+                "recall": round(threshold_recall.get(), 6),
+            }
+        )
 
     return {
         "split": split_name,
@@ -201,40 +216,6 @@ def _evaluate_dataset_split(
             "fpr": fpr_curve.tolist(),
         },
     }
-
-
-def _resolve_sequence_length(
-    spec: EvaluationRunSpec,
-    run_manager: RunManager,
-) -> int:
-    """Determine the evaluation sequence_length.
-
-    Priority:
-    1. Explicitly set on the evaluation spec.
-    2. Loaded from the linked training/prediction run's spec.
-    3. Hard fail - no guessing.
-    """
-    if spec.sequence_length is not None:
-        return spec.sequence_length
-
-    if spec.prediction_run_id is not None:
-        prediction_state = run_manager.find_run(spec.prediction_run_id)
-        source_spec = prediction_state.spec
-
-        if "sequence_length" in source_spec:
-            return int(source_spec["sequence_length"])
-
-        training_run_id = source_spec.get("training_run_id")
-        if training_run_id is not None:
-            training_state = run_manager.find_run(training_run_id)
-            if "sequence_length" in training_state.spec:
-                return int(training_state.spec["sequence_length"])
-
-    raise ValueError(
-        "Cannot determine sequence_length for evaluation. "
-        "Set it explicitly in the evaluation spec, or link to a "
-        "training/prediction run that declares it."
-    )
 
 
 def execute_evaluation(
@@ -280,9 +261,9 @@ def execute_evaluation(
             )
 
         evaluation_logger.info("Loading model from: {}".format(model_path))
-        from bioacoustics_dl_toolbox.training.checkpoints import load_model
-        from bioacoustics_dl_toolbox.models.encoder import ResidualEncoder
         from bioacoustics_dl_toolbox.models.classifier import Classifier
+        from bioacoustics_dl_toolbox.models.encoder import ResidualEncoder
+        from bioacoustics_dl_toolbox.training.checkpoints import load_model
 
         model_dict = load_model(model_path)
         encoder_config = EncoderConfig(**model_dict["encoderConfig"])
@@ -291,6 +272,7 @@ def execute_evaluation(
 
         class_to_index: dict[str, int] = model_dict["classes"]
         _validate_class_to_index(class_to_index)
+        _validate_dataset_matches_model(dataset_handle.class_to_index, class_to_index)
         target_index = _resolve_target_index(class_to_index)
 
         encoder = ResidualEncoder(encoder_config)
@@ -299,9 +281,7 @@ def execute_evaluation(
         classifier.load_state_dict(model_dict["classifierState"])
         model = nn.Sequential(encoder, classifier)
 
-        device = torch.device(
-            "cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu"
-        )
+        device = torch.device("cuda" if spec.use_cuda and torch.cuda.is_available() else "cpu")
         model = model.to(device)
         evaluation_logger.info("Device: {}".format(device))
 
@@ -310,7 +290,7 @@ def execute_evaluation(
             ref_level_db=spec_config.ref_level_db,
         )
 
-        sequence_length = _resolve_sequence_length(spec, run_manager)
+        sequence_length = spec.sequence_length
         evaluation_logger.info("Sequence length: {}".format(sequence_length))
 
         evaluation_logger.info("Evaluating on {} split".format(spec.split))
