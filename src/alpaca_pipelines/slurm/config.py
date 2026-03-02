@@ -10,15 +10,15 @@ from pydantic import BaseModel, Field
 class SlurmConfig(BaseModel):
     """Configuration for SLURM batch script generation."""
 
-    partition: str = "gpu"
+    partition: str = "kisski"
     nodes: int = 1
     ntasks: int = 1
-    cpus_per_task: int = 4
-    gpus: int = 1
-    gpu_type: str | None = None
+    cpus_per_task: int = 8
+    gpus: int = 2
+    gpu_type: str | None = "A100"
     memory_gb: int = 32
-    time_limit: str = "24:00:00"
-    account: str | None = None
+    time_limit: str = "00:15:00"
+    account: str | None = "kisski-alpaca-2"
     job_name: str | None = None
     output_pattern: str = "slurm-%j.out"
     error_pattern: str = "slurm-%j.err"
