@@ -17,7 +17,7 @@ from alpaca_pipelines.contracts import (
     DatasetManifest,
 )
 from alpaca_pipelines.io_utils import read_csv_column, read_json
-from alpaca_pipelines.paths import validate_basename
+from alpaca_pipelines.paths import validate_basename, validate_relative_path
 
 
 @dataclass(frozen=True)
@@ -43,6 +43,7 @@ class DatasetHandle:
     """
 
     dataset_dir: Path
+    collection_root: Path
     manifest: DatasetManifest
     splits: SplitFiles
     snippets_dir: Path
@@ -77,6 +78,7 @@ def _extract_classes_from_manifest(manifest: DatasetManifest) -> tuple[list[str]
 def _validate_manifest_snippets(
     manifest: DatasetManifest,
     snippets_dir: Path,
+    collection_root: Path,
 ) -> dict[str, str]:
     """Validate all manifest snippet entries.
 
@@ -86,6 +88,7 @@ def _validate_manifest_snippets(
     manifest_filenames: dict[str, str] = {}
     for snippet in manifest.snippets:
         validate_basename(snippet.filename)
+        validate_relative_path(snippet.source_path, collection_root)
         snippet_path = snippets_dir / snippet.filename
         if not snippet_path.is_file():
             raise FileNotFoundError(
@@ -137,7 +140,7 @@ def _load_split_file(
     return filenames
 
 
-def load_dataset_handle(dataset_dir: Path) -> DatasetHandle:
+def load_dataset_handle(dataset_dir: Path, collection_root: Path) -> DatasetHandle:
     """Load a complete dataset handle from disk.
 
     Validates manifest, splits, snippet existence, and cross-references
@@ -159,7 +162,7 @@ def load_dataset_handle(dataset_dir: Path) -> DatasetHandle:
     if not snippets_dir.is_dir():
         raise FileNotFoundError("Snippets directory not found: {}".format(snippets_dir))
 
-    manifest_filenames = _validate_manifest_snippets(manifest, snippets_dir)
+    manifest_filenames = _validate_manifest_snippets(manifest, snippets_dir, collection_root)
 
     train_files = _load_split_file(dataset_dir, "train", snippets_dir, manifest_filenames)
     val_files = _load_split_file(dataset_dir, "val", snippets_dir, manifest_filenames)
@@ -169,6 +172,7 @@ def load_dataset_handle(dataset_dir: Path) -> DatasetHandle:
 
     return DatasetHandle(
         dataset_dir=dataset_dir,
+        collection_root=collection_root,
         manifest=manifest,
         splits=SplitFiles(train=train_files, val=val_files, test=test_files),
         snippets_dir=snippets_dir,

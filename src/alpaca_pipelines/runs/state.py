@@ -14,7 +14,6 @@ from datetime import datetime, timezone
 
 from alpaca_pipelines.contracts import RunState, RunStatus
 
-
 _VALID_TRANSITIONS: dict[RunStatus, frozenset[RunStatus]] = {
     "created": frozenset({"submitted", "cancelled", "running"}),
     "submitted": frozenset({"running", "cancelled"}),
@@ -37,7 +36,7 @@ def _validate_transition(current: RunStatus, target: RunStatus) -> None:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def transition_to_submitted(state: RunState) -> RunState:

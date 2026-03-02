@@ -237,7 +237,7 @@ def execute_prediction(
             from alpaca_pipelines.dataset.loader import load_dataset_handle
 
             dataset_dir = environment.resolve_dataset_dir(spec.dataset_name)
-            dataset_handle = load_dataset_handle(dataset_dir)
+            dataset_handle = load_dataset_handle(dataset_dir, environment.collection_root)
             for filename in dataset_handle.splits.test:
                 audio_files.append(str(dataset_handle.snippets_dir / filename))
 
@@ -284,6 +284,12 @@ def execute_prediction(
             all_results.append(file_result)
 
             per_file_path = predictions_dir / "{}.json".format(Path(audio_file).stem)
+            if per_file_path.exists():
+                raise FileExistsError(
+                    "Prediction output path already exists (filename collision): {}".format(
+                        per_file_path
+                    )
+                )
             write_json(per_file_path, file_result)
 
             run_manager.update_progress(
@@ -324,8 +330,6 @@ def execute_prediction(
                 predictions_dir=predictions_dir,
                 rf_model_path=spec.rf_model_path,
                 audio_files=audio_files,
-                sample_rate=spec_config.sample_rate,
-                environment=environment,
                 prediction_logger=prediction_logger,
             )
 

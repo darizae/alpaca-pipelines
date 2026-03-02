@@ -13,7 +13,6 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-
 from bioacoustics_dl_toolbox.audio.datasets import SpectrogramDataset
 from bioacoustics_dl_toolbox.config import (
     AugmentationConfig,
@@ -156,7 +155,7 @@ def execute_training(
 
     try:
         dataset_dir = environment.resolve_dataset_dir(spec.dataset_name)
-        dataset_handle = load_dataset_handle(dataset_dir)
+        dataset_handle = load_dataset_handle(dataset_dir, environment.collection_root)
 
         spec_config = _build_spectrogram_config(spec)
         norm_config = _build_normalization_config(spec)

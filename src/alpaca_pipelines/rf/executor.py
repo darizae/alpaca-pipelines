@@ -17,7 +17,6 @@ import soundfile as sf
 from bioacoustics_dl_toolbox.rf.features import compute_rf_features
 from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
-from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.io_utils import read_json, write_json
 
 
@@ -41,8 +40,6 @@ def apply_rf_filter(
     predictions_dir: Path,
     rf_model_path: str,
     audio_files: list[str],
-    sample_rate: int,
-    environment: PipelineEnvironment,
     prediction_logger: logging.Logger,
 ) -> None:
     """Apply RF filter to all prediction files in the predictions directory.
