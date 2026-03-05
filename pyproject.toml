@@ -52,7 +52,7 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 module = [
-    "bioacoustics_dl_toolbox.*",
+    "bioacoustics-dl-toolbox @ file:../bioacoustics-dl-toolbox",
     "torch.*",
     "soundfile.*",
     "tensorboardX.*",

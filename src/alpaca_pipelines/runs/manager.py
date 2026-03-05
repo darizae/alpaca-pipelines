@@ -19,6 +19,8 @@ from alpaca_pipelines.contracts import (
     LOGS_DIR,
     MODEL_DIR,
     OUTPUTS_DIR,
+    PREDICTION_SELECTION_TABLES_DIR,
+    PREDICTION_SELECTION_TABLES_SUMMARY_FILENAME,
     PREDICTIONS_DIR,
     RUN_STATE_FILENAME,
     SLURM_DIR,
@@ -59,6 +61,7 @@ class RunManager:
             outputs/
                 model/
                 predictions/
+                    selection_tables/
                 evaluation/
                 summaries/
             slurm/
@@ -78,6 +81,7 @@ class RunManager:
         ensure_directory(run_dir / LOGS_DIR)
         ensure_directory(run_dir / OUTPUTS_DIR / MODEL_DIR)
         ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR)
+        ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR)
         ensure_directory(run_dir / OUTPUTS_DIR / EVALUATION_DIR)
         ensure_directory(run_dir / OUTPUTS_DIR / SUMMARIES_DIR)
         ensure_directory(run_dir / SLURM_DIR)
@@ -98,9 +102,17 @@ class RunManager:
 
         self._scaffold_run_dirs(run_dir)
 
+        selection_tables_dir = (
+            run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR
+        )
+
         outputs = RunOutputs(
             model_dir=str(run_dir / OUTPUTS_DIR / MODEL_DIR),
             predictions_dir=str(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR),
+            prediction_selection_tables_dir=str(selection_tables_dir),
+            prediction_selection_tables_summary_path=str(
+                selection_tables_dir / PREDICTION_SELECTION_TABLES_SUMMARY_FILENAME
+            ),
             evaluation_dir=str(run_dir / OUTPUTS_DIR / EVALUATION_DIR),
             summaries_dir=str(run_dir / OUTPUTS_DIR / SUMMARIES_DIR),
             log_dir=str(run_dir / LOGS_DIR),

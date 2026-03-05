@@ -164,6 +164,33 @@ def _cmd_generate_slurm(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        summary = api.export_prediction_run_selection_tables(
+            prediction_run_id=args.run_id,
+            freq_low_hz=args.freq_low_hz,
+            freq_high_hz=args.freq_high_hz,
+            use_rf_filtered=args.use_rf_filtered,
+        )
+    except Exception as exc:
+        print("Export failed: {}".format(exc), file=sys.stderr)
+        sys.exit(1)
+
+    selection_tables_dir = summary.get("selection_tables_dir")
+    summary_path = str(Path(selection_tables_dir) / "selection_tables_summary.json")  # type: ignore[arg-type]
+    print("Selection tables exported.")
+    print("  Dir:      {}".format(selection_tables_dir))
+    print("  Summary:  {}".format(summary_path))
+
+    files = summary.get("files", [])
+    if isinstance(files, list) and files:
+        print("  Files:")
+        for entry in files:
+            if isinstance(entry, dict) and "selection_table" in entry:
+                print("    {}".format(entry["selection_table"]))
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="alpaca-pipelines",
@@ -214,6 +241,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Path to SLURM config JSON (optional)",
     )
 
+    export_tables_parser = subparsers.add_parser(
+        "export-selection-tables",
+        help="Export Raven selection tables for a completed prediction run",
+    )
+    export_tables_parser.add_argument("--run-id", required=True, help="Prediction run ID")
+    export_tables_parser.add_argument("--freq-low-hz", type=int, default=0)
+    export_tables_parser.add_argument("--freq-high-hz", type=int, default=4000)
+    export_tables_parser.add_argument("--use-rf-filtered", action="store_true")
+
     return parser
 
 
@@ -232,6 +268,7 @@ def main() -> None:
         "inspect": _cmd_inspect,
         "cancel": _cmd_cancel,
         "generate-slurm": _cmd_generate_slurm,
+        "export-selection-tables": _cmd_export_selection_tables,
     }
 
     handler = command_handlers.get(args.command)

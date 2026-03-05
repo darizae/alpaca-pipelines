@@ -114,6 +114,8 @@ class RunOutputs(BaseModel):
     rf_model_path: str | None = None
     model_dir: str | None = None
     predictions_dir: str | None = None
+    prediction_selection_tables_dir: str | None = None
+    prediction_selection_tables_summary_path: str | None = None
     evaluation_dir: str | None = None
     summaries_dir: str | None = None
     tensorboard_dir: str | None = None
@@ -162,5 +164,7 @@ OUTPUTS_DIR: str = "outputs"
 SLURM_DIR: str = "slurm"
 MODEL_DIR: str = "model"
 PREDICTIONS_DIR: str = "predictions"
+PREDICTION_SELECTION_TABLES_DIR: str = "selection_tables"
+PREDICTION_SELECTION_TABLES_SUMMARY_FILENAME: str = "selection_tables_summary.json"
 EVALUATION_DIR: str = "evaluation"
 SUMMARIES_DIR: str = "summaries"

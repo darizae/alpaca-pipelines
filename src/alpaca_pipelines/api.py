@@ -210,6 +210,66 @@ class PipelineAPI:
             use_rf_filtered=use_rf_filtered,
         )
 
+    def export_prediction_run_selection_tables(
+        self,
+        prediction_run_id: str,
+        freq_low_hz: int = 0,
+        freq_high_hz: int = 4000,
+        use_rf_filtered: bool = False,
+    ) -> dict[str, Any]:
+        """Export Raven selection tables for all files in a completed prediction run.
+
+        Writes tables and a summary JSON under the run's persisted selection_tables
+        directory and updates run_state.outputs to point at the summary.
+        """
+        from alpaca_pipelines.postprocessing.executor import export_prediction_run_selection_tables
+
+        run_state = self.run_manager.find_run(prediction_run_id)
+        if run_state.run_type != "prediction":
+            raise ValueError(
+                "export_prediction_run_selection_tables requires a prediction run, got: {}".format(
+                    run_state.run_type
+                )
+            )
+        if run_state.status != "completed":
+            raise ValueError(
+                "Prediction run must be completed to export selection tables, status is: {}".format(
+                    run_state.status
+                )
+            )
+
+        if run_state.outputs.predictions_dir is None:
+            raise ValueError("Run outputs missing predictions_dir: {}".format(prediction_run_id))
+        predictions_dir = Path(run_state.outputs.predictions_dir)
+
+        if run_state.outputs.prediction_selection_tables_dir is None:
+            raise ValueError(
+                "Run outputs missing prediction_selection_tables_dir: {}".format(prediction_run_id)
+            )
+        selection_tables_dir = Path(run_state.outputs.prediction_selection_tables_dir)
+
+        selection_tables_summary = export_prediction_run_selection_tables(
+            predictions_dir=predictions_dir,
+            selection_tables_dir=selection_tables_dir,
+            freq_low_hz=freq_low_hz,
+            freq_high_hz=freq_high_hz,
+            use_rf_filtered=use_rf_filtered,
+        )
+
+        summary_path_value = selection_tables_summary.get("selection_tables_dir")
+        if not isinstance(summary_path_value, str) or not summary_path_value:
+            raise ValueError(
+                "Invalid selection table summary " "payload (missing selection_tables_dir)"
+            )
+
+        summary_file_path = selection_tables_dir / "selection_tables_summary.json"
+        self.run_manager.update_outputs(
+            run_state.run_id,
+            prediction_selection_tables_summary_path=str(summary_file_path),
+        )
+
+        return selection_tables_summary
+
     def aggregate_evaluations(
         self,
         evaluation_run_ids: list[str],
