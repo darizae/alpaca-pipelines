@@ -16,6 +16,7 @@ folder-based HPC persistence layer and a future backend/REST API.
 ## Architecture
 
 ```
+
 ┌─────────────────────────────────────────────────┐
 │  Future Backend / REST API                       │
 │  (drives PipelineAPI programmatically)           │
@@ -37,7 +38,8 @@ folder-based HPC persistence layer and a future backend/REST API.
 │  │             │ │  splits/)  │ │  outputs/)  │ │
 │  └────────────┘ └────────────┘ └─────────────┘ │
 └─────────────────────────────────────────────────┘
-```
+
+````
 
 ## Installation
 
@@ -52,7 +54,7 @@ pip install -e /path/to/bioacoustics-dl-toolbox
 # Install alpaca-pipelines
 pip install -e ".[dev]"
 pre-commit install
-```
+````
 
 ## Configuration
 
@@ -65,12 +67,12 @@ make env-init
 
 Required environment variables:
 
-| Variable | Description |
-|---|---|
+| Variable                 | Description                                       |
+| ------------------------ | ------------------------------------------------- |
 | `ALPACA_COLLECTION_ROOT` | Root of audio collections (`audio_collection_*/`) |
-| `ALPACA_MERGED_INDEX` | Path to `merged_index.json` |
-| `ALPACA_DATASETS_ROOT` | Root of built datasets (strategy directories) |
-| `ALPACA_RUNS_ROOT` | Root for pipeline run state and outputs |
+| `ALPACA_MERGED_INDEX`    | Path to `merged_index.json`                       |
+| `ALPACA_DATASETS_ROOT`   | Root of built datasets (strategy directories)     |
+| `ALPACA_RUNS_ROOT`       | Root for pipeline run state and outputs           |
 
 ## Usage
 
@@ -92,6 +94,49 @@ make inspect-run RUN_ID=<uuid>
 # Generate SLURM script
 make generate-slurm RUN_ID=<uuid>
 ```
+
+### Post-processing: Raven selection tables (prediction runs)
+
+After a **prediction** run completes, you can export **Raven-compatible** selection
+tables (TSV `.txt`) for **all predicted audio files** in that run. This is a batch
+operation driven by the run’s `prediction_summary.json` (authoritative list of files).
+
+Outputs are persisted under:
+
+`ALPACA_RUNS_ROOT/prediction/<run_id>/outputs/predictions/selection_tables/`
+
+#### Makefile
+
+```bash
+# Export selection tables from base prediction outputs (<stem>.json)
+make export-prediction-selection-tables RUN_ID=<prediction-run-uuid>
+
+# Export selection tables from RF-filtered outputs (<stem>_rf_filtered.json)
+make export-prediction-selection-tables RUN_ID=<prediction-run-uuid> USE_RF_FILTERED=1
+
+# Override frequency bounds in the exported tables
+make export-prediction-selection-tables RUN_ID=<prediction-run-uuid> FREQ_LOW_HZ=0 FREQ_HIGH_HZ=4000
+```
+
+#### CLI (direct)
+
+```bash
+# Base mode
+alpaca-pipelines export-selection-tables --run-id <prediction-run-uuid>
+
+# RF-filtered mode
+alpaca-pipelines export-selection-tables --run-id <prediction-run-uuid> --use-rf-filtered
+
+# With explicit frequency bounds
+alpaca-pipelines export-selection-tables --run-id <prediction-run-uuid> --freq-low-hz 0 --freq-high-hz 4000
+```
+
+Hard behavior:
+
+* The prediction run must be `completed`.
+* The exporter uses `prediction_summary.json` and will not infer files by directory scanning.
+* Missing required prediction JSON files cause immediate failure.
+* If output `.txt` files already exist, the exporter fails immediately.
 
 ### Python API
 
@@ -121,6 +166,30 @@ print(f"Status: {status.status}")
 # Execute
 result = api.execute_run(run.run_id)
 print(f"Completed: {result.outputs.trained_model_path}")
+```
+
+#### Python API: selection tables export (batch)
+
+```python
+from alpaca_pipelines import PipelineAPI
+from alpaca_pipelines.config import PipelineEnvironment
+
+env = PipelineEnvironment.from_explicit(
+    collection_root="/path/to/collections",
+    merged_index_path="/path/to/merged_index.json",
+    datasets_root="/path/to/datasets",
+    runs_root="/path/to/runs",
+)
+api = PipelineAPI(env)
+
+summary = api.export_prediction_run_selection_tables(
+    prediction_run_id="<prediction-run-uuid>",
+    freq_low_hz=0,
+    freq_high_hz=4000,
+    use_rf_filtered=False,
+)
+
+print(summary["selection_tables_dir"])
 ```
 
 ## Run State Machine
