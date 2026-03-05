@@ -19,6 +19,7 @@ RUN_CONFIG ?=
         create-training-run create-prediction-run create-evaluation-run \
         execute-run list-runs inspect-run cancel-run \
         generate-slurm submit-slurm \
+        export-prediction-selection-tables \
         clean-run
 
 venv:
@@ -82,6 +83,20 @@ inspect-run: env-check
 cancel-run: env-check
 	@test -n "$(RUN_ID)" || (echo "Usage: make cancel-run RUN_ID=<id>"; exit 1)
 	@$(VENV_ACTIVATE) && alpaca-pipelines cancel --run-id "$(RUN_ID)"
+
+# --- Post-processing ---
+
+USE_RF_FILTERED ?= 0
+FREQ_LOW_HZ ?= 0
+FREQ_HIGH_HZ ?= 4000
+
+export-prediction-selection-tables: env-check
+	@test -n "$(RUN_ID)" || (echo "Usage: make export-prediction-selection-tables RUN_ID=<id> [USE_RF_FILTERED=1] [FREQ_LOW_HZ=0] [FREQ_HIGH_HZ=4000]"; exit 1)
+	@if [ "$(USE_RF_FILTERED)" = "1" ]; then \
+		$(VENV_ACTIVATE) && alpaca-pipelines export-selection-tables --run-id "$(RUN_ID)" --freq-low-hz "$(FREQ_LOW_HZ)" --freq-high-hz "$(FREQ_HIGH_HZ)" --use-rf-filtered; \
+	else \
+		$(VENV_ACTIVATE) && alpaca-pipelines export-selection-tables --run-id "$(RUN_ID)" --freq-low-hz "$(FREQ_LOW_HZ)" --freq-high-hz "$(FREQ_HIGH_HZ)"; \
+	fi
 
 # --- SLURM ---
 
