@@ -76,14 +76,23 @@ class RunManager:
     def _state_path(self, run_type: RunType, run_id: str) -> Path:
         return self._run_dir(run_type, run_id) / RUN_STATE_FILENAME
 
-    def _scaffold_run_dirs(self, run_dir: Path) -> None:
+    def _scaffold_run_dirs(self, run_dir: Path, run_type: RunType) -> None:
         """Create the standard directory scaffold for a new run."""
         ensure_directory(run_dir / LOGS_DIR)
-        ensure_directory(run_dir / OUTPUTS_DIR / MODEL_DIR)
-        ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR)
-        ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR)
-        ensure_directory(run_dir / OUTPUTS_DIR / EVALUATION_DIR)
-        ensure_directory(run_dir / OUTPUTS_DIR / SUMMARIES_DIR)
+        if run_type in ("training", "rf_training"):
+            ensure_directory(run_dir / OUTPUTS_DIR / MODEL_DIR)
+        if run_type == "prediction":
+            ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR)
+            ensure_directory(
+                run_dir
+                / OUTPUTS_DIR
+                / PREDICTIONS_DIR
+                / PREDICTION_SELECTION_TABLES_DIR
+            )
+        if run_type == "evaluation":
+            ensure_directory(run_dir / OUTPUTS_DIR / EVALUATION_DIR)
+        if run_type in ("training", "rf_training"):
+            ensure_directory(run_dir / OUTPUTS_DIR / SUMMARIES_DIR)
         ensure_directory(run_dir / SLURM_DIR)
 
     def create_run(
@@ -100,23 +109,23 @@ class RunManager:
         if run_dir.exists():
             raise FileExistsError("Run directory already exists: {}".format(run_dir))
 
-        self._scaffold_run_dirs(run_dir)
+        self._scaffold_run_dirs(run_dir, run_type)
 
-        selection_tables_dir = (
-            run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR
-        )
-
-        outputs = RunOutputs(
-            model_dir=str(run_dir / OUTPUTS_DIR / MODEL_DIR),
-            predictions_dir=str(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR),
-            prediction_selection_tables_dir=str(selection_tables_dir),
-            prediction_selection_tables_summary_path=str(
+        outputs = RunOutputs(log_dir=str(run_dir / LOGS_DIR))
+        if run_type in ("training", "rf_training"):
+            outputs.model_dir = str(run_dir / OUTPUTS_DIR / MODEL_DIR)
+            outputs.summaries_dir = str(run_dir / OUTPUTS_DIR / SUMMARIES_DIR)
+        if run_type == "prediction":
+            selection_tables_dir = (
+                run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR
+            )
+            outputs.predictions_dir = str(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR)
+            outputs.prediction_selection_tables_dir = str(selection_tables_dir)
+            outputs.prediction_selection_tables_summary_path = str(
                 selection_tables_dir / PREDICTION_SELECTION_TABLES_SUMMARY_FILENAME
-            ),
-            evaluation_dir=str(run_dir / OUTPUTS_DIR / EVALUATION_DIR),
-            summaries_dir=str(run_dir / OUTPUTS_DIR / SUMMARIES_DIR),
-            log_dir=str(run_dir / LOGS_DIR),
-        )
+            )
+        if run_type == "evaluation":
+            outputs.evaluation_dir = str(run_dir / OUTPUTS_DIR / EVALUATION_DIR)
 
         state = RunState(
             run_id=run_id,
