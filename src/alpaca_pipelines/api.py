@@ -1,13 +1,14 @@
 """
 Public API surface for alpaca-pipelines.
 
-This is the primary interface that the future backend app will drive.
+This is the primary interface that the backend app drives.
 All operations are available as methods on ``PipelineAPI``.
 The CLI is a thin wrapper around this class.
 """
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
+from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_meta
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.slurm.generator import generate_slurm_script
 from alpaca_pipelines.training.config import TrainingRunSpec
@@ -138,8 +140,22 @@ class PipelineAPI:
         return self.run_manager.list_runs(run_type=run_type, status_filter=status_filter)
 
     def cancel_run(self, run_id: str) -> RunState:
-        """Cancel a run (only from created or submitted state)."""
-        return self.run_manager.mark_cancelled(run_id)
+        """Cancel a run from the created or submitted state."""
+        run_state = self.run_manager.find_run(run_id)
+        if run_state.status == "created":
+            return self.run_manager.mark_cancelled(run_id)
+        if run_state.status == "submitted":
+            if run_state.slurm_job_id is None:
+                raise ValueError(
+                    "Cannot cancel submitted run without slurm_job_id: {}".format(run_id)
+                )
+            self._cancel_slurm_job(run_state.slurm_job_id)
+            return self.run_manager.mark_cancelled(run_id)
+        raise ValueError(
+            "Cannot cancel run {}: status is {} (expected created or submitted)".format(
+                run_id, run_state.status
+            )
+        )
 
     def get_run_outputs(self, run_id: str) -> dict[str, Any]:
         """Get the output pointers for a completed run."""
@@ -177,6 +193,34 @@ class PipelineAPI:
             slurm_config=slurm_config,
             environment_vars=environment_vars,
         )
+
+    def submit_run(
+        self,
+        run_id: str,
+        slurm_config: SlurmConfig | None = None,
+    ) -> RunState:
+        """Generate and submit a SLURM job for a created run."""
+        run_state = self.run_manager.find_run(run_id)
+        if run_state.status != "created":
+            raise ValueError(
+                "Cannot submit run {}: status is {} (expected created)".format(
+                    run_id, run_state.status
+                )
+            )
+        if run_state.submitted_at is not None or run_state.slurm_job_id is not None:
+            raise ValueError("Run already has submission metadata: {}".format(run_id))
+
+        script_path = self.generate_slurm_script(run_id=run_id, slurm_config=slurm_config)
+        slurm_job_id = self._submit_slurm_job(script_path)
+        return self.run_manager.mark_submitted(run_id, slurm_job_id)
+
+    def migrate_backend_meta(
+        self,
+        runs_root: Path | None = None,
+    ) -> MigrationSummary:
+        """Backfill legacy backend_meta.json fields into run_state.json."""
+        target_root = runs_root if runs_root is not None else self.environment.runs_root
+        return migrate_backend_meta(target_root, self.run_manager)
 
     # ------------------------------------------------------------------
     # Post-processing
@@ -284,3 +328,28 @@ class PipelineAPI:
             evaluation_dirs.append(Path(run_state.run_dir) / "outputs" / "evaluation")
 
         return aggregate_evaluation_results(evaluation_dirs, output_path)
+
+    def _submit_slurm_job(self, script_path: Path) -> str:
+        result = subprocess.run(
+            ["sbatch", "--parsable", str(script_path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "sbatch failed")
+        raw = result.stdout.strip()
+        job_id = raw.split(";", 1)[0].strip()
+        if not job_id.isdigit():
+            raise ValueError("Could not parse job ID from sbatch output: {!r}".format(raw))
+        return job_id
+
+    def _cancel_slurm_job(self, job_id: str) -> None:
+        result = subprocess.run(
+            ["scancel", job_id],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(result.stderr.strip() or "scancel failed for {}".format(job_id))

@@ -1,6 +1,6 @@
 # Persistence Layer Contract (Defaults)
 
-This document specifies the **folder-based persistence layer** used by `alpaca-pipelines` and the future React/FastAPI app.
+This document specifies the **folder-based persistence layer** used by `alpaca-pipelines` and the React/FastAPI app.
 
 It is a **hard contract**: implement exactly what is described here. Do not invent fields. Do not treat root-relative paths as absolute. If required inputs are missing or malformed, the system **must fail immediately** with clear errors.
 

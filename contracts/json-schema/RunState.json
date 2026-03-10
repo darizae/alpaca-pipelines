@@ -1,0 +1,320 @@
+{
+  "$defs": {
+    "RunOutputs": {
+      "description": "Pointers to output artifacts produced by a run.\n\nDirectory pointers (``*_dir``) are set at run creation time.\nFile pointers are set by executors when the artifact is actually produced.",
+      "properties": {
+        "trained_model_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trained Model Path"
+        },
+        "rf_model_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rf Model Path"
+        },
+        "model_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model Dir"
+        },
+        "predictions_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Predictions Dir"
+        },
+        "prediction_selection_tables_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prediction Selection Tables Dir"
+        },
+        "prediction_selection_tables_summary_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prediction Selection Tables Summary Path"
+        },
+        "evaluation_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evaluation Dir"
+        },
+        "summaries_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Summaries Dir"
+        },
+        "tensorboard_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Tensorboard Dir"
+        },
+        "log_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Log Dir"
+        },
+        "rf_filtered": {
+          "default": false,
+          "title": "Rf Filtered",
+          "type": "boolean"
+        }
+      },
+      "title": "RunOutputs",
+      "type": "object"
+    },
+    "RunProgress": {
+      "description": "Optional progress tracking for long-running jobs.",
+      "properties": {
+        "current_epoch": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Epoch"
+        },
+        "total_epochs": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Epochs"
+        },
+        "current_phase": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current Phase"
+        },
+        "best_metric_value": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Best Metric Value"
+        },
+        "best_metric_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Best Metric Name"
+        }
+      },
+      "title": "RunProgress",
+      "type": "object"
+    }
+  },
+  "description": "Persistent state of a pipeline run, stored as run_state.json.",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "run_type": {
+      "enum": [
+        "training",
+        "prediction",
+        "evaluation",
+        "rf_training"
+      ],
+      "title": "Run Type",
+      "type": "string"
+    },
+    "status": {
+      "default": "created",
+      "enum": [
+        "created",
+        "submitted",
+        "running",
+        "completed",
+        "failed",
+        "cancelled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "submitted_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Submitted At"
+    },
+    "started_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Started At"
+    },
+    "completed_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Completed At"
+    },
+    "spec": {
+      "additionalProperties": true,
+      "title": "Spec",
+      "type": "object"
+    },
+    "outputs": {
+      "$ref": "#/$defs/RunOutputs"
+    },
+    "progress": {
+      "$ref": "#/$defs/RunProgress"
+    },
+    "error_message": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Message"
+    },
+    "slurm_job_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Slurm Job Id"
+    },
+    "run_dir": {
+      "default": "",
+      "title": "Run Dir",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "run_type",
+    "created_at"
+  ],
+  "title": "RunState",
+  "type": "object"
+}

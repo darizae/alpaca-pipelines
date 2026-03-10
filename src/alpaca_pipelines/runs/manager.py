@@ -144,14 +144,14 @@ class RunManager:
     def find_run(self, run_id: str) -> RunState:
         """Find a run by ID, searching across all run types."""
         for run_type_candidate in ("training", "prediction", "evaluation", "rf_training"):
-            state_path = self._state_path(run_type_candidate, run_id)  # type: ignore[arg-type]
+            state_path = self._state_path(run_type_candidate, run_id)
             if state_path.is_file():
-                return self.load_state(run_type_candidate, run_id)  # type: ignore[arg-type]
+                return self.load_state(run_type_candidate, run_id)
         raise FileNotFoundError("Run not found: {}".format(run_id))
 
-    def mark_submitted(self, run_id: str) -> RunState:
+    def mark_submitted(self, run_id: str, slurm_job_id: str) -> RunState:
         state = self.find_run(run_id)
-        updated = transition_to_submitted(state)
+        updated = transition_to_submitted(state, slurm_job_id)
         self._persist_state(updated)
         return updated
 

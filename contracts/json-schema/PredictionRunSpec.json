@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "NormalizationSpec": {
+      "description": "Normalization parameters for prediction.",
+      "properties": {
+        "mode": {
+          "default": "db",
+          "enum": [
+            "db",
+            "min_max"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "min_level_db": {
+          "default": -100,
+          "title": "Min Level Db",
+          "type": "number"
+        },
+        "ref_level_db": {
+          "default": 20,
+          "title": "Ref Level Db",
+          "type": "number"
+        }
+      },
+      "title": "NormalizationSpec",
+      "type": "object"
+    }
+  },
+  "description": "Complete specification for a prediction run.",
+  "properties": {
+    "model_path": {
+      "title": "Model Path",
+      "type": "string"
+    },
+    "mode": {
+      "default": "tape",
+      "enum": [
+        "tape",
+        "dataset"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "audio_files": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Audio Files",
+      "type": "array"
+    },
+    "dataset_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Dataset Name"
+    },
+    "sequence_length_ms": {
+      "default": 1280,
+      "title": "Sequence Length Ms",
+      "type": "integer"
+    },
+    "hop_ms": {
+      "default": 640,
+      "title": "Hop Ms",
+      "type": "integer"
+    },
+    "batch_size": {
+      "default": 16,
+      "title": "Batch Size",
+      "type": "integer"
+    },
+    "num_workers": {
+      "default": 4,
+      "title": "Num Workers",
+      "type": "integer"
+    },
+    "use_cuda": {
+      "default": true,
+      "title": "Use Cuda",
+      "type": "boolean"
+    },
+    "normalization": {
+      "$ref": "#/$defs/NormalizationSpec"
+    },
+    "detection_threshold": {
+      "default": 0.5,
+      "title": "Detection Threshold",
+      "type": "number"
+    },
+    "merge_overlapping": {
+      "default": true,
+      "title": "Merge Overlapping",
+      "type": "boolean"
+    },
+    "min_detection_duration_s": {
+      "default": 0.0,
+      "title": "Min Detection Duration S",
+      "type": "number"
+    },
+    "apply_rf_filter": {
+      "default": false,
+      "title": "Apply Rf Filter",
+      "type": "boolean"
+    },
+    "rf_model_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rf Model Path"
+    },
+    "run_name": {
+      "default": "",
+      "title": "Run Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "model_path"
+  ],
+  "title": "PredictionRunSpec",
+  "type": "object"
+}

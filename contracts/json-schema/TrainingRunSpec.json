@@ -1,0 +1,349 @@
+{
+  "$defs": {
+    "AugmentationSpec": {
+      "description": "Data augmentation parameters.",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "amplitude_increase_db": {
+          "default": 3,
+          "title": "Amplitude Increase Db",
+          "type": "integer"
+        },
+        "amplitude_decrease_db": {
+          "default": -6,
+          "title": "Amplitude Decrease Db",
+          "type": "integer"
+        },
+        "time_stretch_from": {
+          "default": 0.5,
+          "title": "Time Stretch From",
+          "type": "number"
+        },
+        "time_stretch_to": {
+          "default": 2.0,
+          "title": "Time Stretch To",
+          "type": "number"
+        },
+        "pitch_shift_from": {
+          "default": 0.5,
+          "title": "Pitch Shift From",
+          "type": "number"
+        },
+        "pitch_shift_to": {
+          "default": 1.5,
+          "title": "Pitch Shift To",
+          "type": "number"
+        },
+        "noise_files": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Noise Files",
+          "type": "array"
+        },
+        "noise_min_snr": {
+          "default": 12,
+          "title": "Noise Min Snr",
+          "type": "integer"
+        },
+        "noise_max_snr": {
+          "default": -3,
+          "title": "Noise Max Snr",
+          "type": "integer"
+        }
+      },
+      "title": "AugmentationSpec",
+      "type": "object"
+    },
+    "ClassifierSpec": {
+      "description": "Classification head parameters.",
+      "properties": {
+        "input_channels": {
+          "default": 512,
+          "title": "Input Channels",
+          "type": "integer"
+        },
+        "pooling": {
+          "default": "avg",
+          "enum": [
+            "avg",
+            "max"
+          ],
+          "title": "Pooling",
+          "type": "string"
+        },
+        "num_classes": {
+          "default": 2,
+          "title": "Num Classes",
+          "type": "integer"
+        }
+      },
+      "title": "ClassifierSpec",
+      "type": "object"
+    },
+    "EncoderSpec": {
+      "description": "Residual encoder parameters.",
+      "properties": {
+        "input_channels": {
+          "default": 1,
+          "title": "Input Channels",
+          "type": "integer"
+        },
+        "conv_kernel_size": {
+          "default": 7,
+          "title": "Conv Kernel Size",
+          "type": "integer"
+        },
+        "max_pool": {
+          "default": 1,
+          "enum": [
+            0,
+            1,
+            2
+          ],
+          "title": "Max Pool",
+          "type": "integer"
+        },
+        "resnet_size": {
+          "default": 18,
+          "enum": [
+            18,
+            34,
+            50,
+            101,
+            152
+          ],
+          "title": "Resnet Size",
+          "type": "integer"
+        }
+      },
+      "title": "EncoderSpec",
+      "type": "object"
+    },
+    "NormalizationSpec": {
+      "description": "Normalization parameters.",
+      "properties": {
+        "mode": {
+          "default": "db",
+          "enum": [
+            "db",
+            "min_max"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "min_level_db": {
+          "default": -100,
+          "title": "Min Level Db",
+          "type": "number"
+        },
+        "ref_level_db": {
+          "default": 20,
+          "title": "Ref Level Db",
+          "type": "number"
+        }
+      },
+      "title": "NormalizationSpec",
+      "type": "object"
+    },
+    "SpectrogramSpec": {
+      "description": "Spectrogram pipeline parameters.",
+      "properties": {
+        "sample_rate": {
+          "default": 44100,
+          "title": "Sample Rate",
+          "type": "integer"
+        },
+        "preemphasis": {
+          "default": 0.98,
+          "title": "Preemphasis",
+          "type": "number"
+        },
+        "n_fft": {
+          "default": 4096,
+          "title": "N Fft",
+          "type": "integer"
+        },
+        "hop_length": {
+          "default": 441,
+          "title": "Hop Length",
+          "type": "integer"
+        },
+        "n_freq_bins": {
+          "default": 256,
+          "title": "N Freq Bins",
+          "type": "integer"
+        },
+        "f_min": {
+          "default": 500,
+          "title": "F Min",
+          "type": "integer"
+        },
+        "f_max": {
+          "default": 10000,
+          "title": "F Max",
+          "type": "integer"
+        },
+        "freq_compression": {
+          "default": "linear",
+          "enum": [
+            "linear",
+            "mel",
+            "mfcc"
+          ],
+          "title": "Freq Compression",
+          "type": "string"
+        },
+        "min_level_db": {
+          "default": -100,
+          "title": "Min Level Db",
+          "type": "number"
+        },
+        "ref_level_db": {
+          "default": 20,
+          "title": "Ref Level Db",
+          "type": "number"
+        }
+      },
+      "title": "SpectrogramSpec",
+      "type": "object"
+    },
+    "TrainingHyperparameters": {
+      "description": "Training loop hyperparameters.",
+      "properties": {
+        "max_epochs": {
+          "default": 500,
+          "title": "Max Epochs",
+          "type": "integer"
+        },
+        "batch_size": {
+          "default": 16,
+          "title": "Batch Size",
+          "type": "integer"
+        },
+        "num_workers": {
+          "default": 4,
+          "title": "Num Workers",
+          "type": "integer"
+        },
+        "learning_rate": {
+          "default": 1e-05,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "beta1": {
+          "default": 0.5,
+          "title": "Beta1",
+          "type": "number"
+        },
+        "lr_patience_epochs": {
+          "default": 8,
+          "title": "Lr Patience Epochs",
+          "type": "integer"
+        },
+        "lr_decay_factor": {
+          "default": 0.5,
+          "title": "Lr Decay Factor",
+          "type": "number"
+        },
+        "early_stopping_patience_epochs": {
+          "default": 20,
+          "title": "Early Stopping Patience Epochs",
+          "type": "integer"
+        },
+        "epochs_per_eval": {
+          "default": 2,
+          "title": "Epochs Per Eval",
+          "type": "integer"
+        },
+        "val_metric": {
+          "default": "accuracy",
+          "title": "Val Metric",
+          "type": "string"
+        },
+        "val_metric_mode": {
+          "default": "max",
+          "enum": [
+            "min",
+            "max"
+          ],
+          "title": "Val Metric Mode",
+          "type": "string"
+        },
+        "use_cuda": {
+          "default": true,
+          "title": "Use Cuda",
+          "type": "boolean"
+        },
+        "pin_memory": {
+          "default": true,
+          "title": "Pin Memory",
+          "type": "boolean"
+        }
+      },
+      "title": "TrainingHyperparameters",
+      "type": "object"
+    }
+  },
+  "description": "Complete specification for a training run.\n\nThis is serialized into run_state.json and is immutable after creation.\nThe backend or CLI constructs this, the executor consumes it.",
+  "properties": {
+    "dataset_name": {
+      "title": "Dataset Name",
+      "type": "string"
+    },
+    "run_name": {
+      "default": "",
+      "title": "Run Name",
+      "type": "string"
+    },
+    "sequence_length": {
+      "default": 128,
+      "title": "Sequence Length",
+      "type": "integer"
+    },
+    "spectrogram": {
+      "$ref": "#/$defs/SpectrogramSpec"
+    },
+    "normalization": {
+      "$ref": "#/$defs/NormalizationSpec"
+    },
+    "augmentation": {
+      "$ref": "#/$defs/AugmentationSpec"
+    },
+    "encoder": {
+      "$ref": "#/$defs/EncoderSpec"
+    },
+    "classifier": {
+      "$ref": "#/$defs/ClassifierSpec"
+    },
+    "training": {
+      "$ref": "#/$defs/TrainingHyperparameters"
+    },
+    "cache_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cache Dir"
+    },
+    "positive_class": {
+      "default": "target",
+      "title": "Positive Class",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dataset_name"
+  ],
+  "title": "TrainingRunSpec",
+  "type": "object"
+}
