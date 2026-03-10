@@ -8,6 +8,7 @@ to execute a full training run (train → validate → test → save model).
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -30,12 +31,123 @@ from bioacoustics_dl_toolbox.training.checkpoints import save_model
 from bioacoustics_dl_toolbox.training.trainer import Trainer
 
 from alpaca_pipelines.config import PipelineEnvironment
-from alpaca_pipelines.contracts import RunState
+from alpaca_pipelines.contracts import (
+    TRAINING_HISTORY_FILENAME,
+    TRAINING_SUMMARY_FILENAME,
+    RunState,
+)
 from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
+from alpaca_pipelines.io_utils import write_json
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.training.config import TrainingRunSpec
 
 logger = logging.getLogger(__name__)
+
+_SCALAR_LOG_PATTERN = re.compile(
+    r"^(?P<phase>train|val|test)\|(?P<epoch>\d+)"
+    r"(?P<metrics>(?:\|[a-z0-9_]+:[^|]+)+)$"
+)
+
+
+def _parse_float(value: str) -> float | None:
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+class _TrainingMetricsCollector(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(level=logging.INFO)
+        self.history: dict[str, list[dict[str, float | int]]] = {
+            "train": [],
+            "val": [],
+            "test": [],
+        }
+
+    def emit(self, record: logging.LogRecord) -> None:
+        message = record.getMessage()
+        match = _SCALAR_LOG_PATTERN.match(message)
+        if not match:
+            return
+
+        metrics: dict[str, float | int] = {"epoch": int(match.group("epoch"))}
+        raw_metrics = match.group("metrics").split("|")
+        for raw_metric in raw_metrics:
+            if not raw_metric:
+                continue
+            name, _, value = raw_metric.partition(":")
+            parsed = _parse_float(value)
+            if parsed is None:
+                continue
+            metrics[name] = parsed
+        self.history[match.group("phase")].append(metrics)
+
+    def build_history_payload(self) -> dict[str, Any]:
+        return {
+            phase: entries
+            for phase, entries in self.history.items()
+            if entries
+        }
+
+
+def _best_metric_from_history(
+    history: dict[str, list[dict[str, float | int]]],
+    metric_name: str,
+    metric_mode: str,
+) -> tuple[float | None, int | None]:
+    val_history = history.get("val", [])
+    best_value: float | None = None
+    best_epoch: int | None = None
+    for entry in val_history:
+        value = entry.get(metric_name)
+        epoch = entry.get("epoch")
+        if not isinstance(value, float) or not isinstance(epoch, int):
+            continue
+        if best_value is None:
+            best_value = value
+            best_epoch = epoch
+            continue
+        if metric_mode == "min":
+            if value < best_value:
+                best_value = value
+                best_epoch = epoch
+        elif value > best_value:
+            best_value = value
+            best_epoch = epoch
+    return best_value, best_epoch
+
+
+def _build_training_summary_payload(
+    *,
+    spec: TrainingRunSpec,
+    total_epochs: int,
+    history: dict[str, list[dict[str, float | int]]],
+    best_metric_name: str,
+    best_metric_value: float | None,
+    best_epoch: int | None,
+    model_output_path: Path,
+    tensorboard_dir: str | None,
+) -> dict[str, Any]:
+    epochs_completed = max(
+        (entry.get("epoch", -1) for entry in history.get("train", [])),
+        default=-1,
+    )
+    test_metrics = history.get("test", [{}])[-1] if history.get("test") else {}
+
+    return {
+        "dataset_name": spec.dataset_name,
+        "run_name": spec.run_name,
+        "positive_class": spec.positive_class,
+        "current_epoch": epochs_completed + 1 if epochs_completed >= 0 else 0,
+        "total_epochs": total_epochs,
+        "best_metric_name": best_metric_name,
+        "best_metric_value": best_metric_value,
+        "best_epoch": best_epoch,
+        "test_metrics": test_metrics,
+        "tensorboard_dir": tensorboard_dir,
+        "trained_model_path": str(model_output_path),
+    }
 
 
 def _build_spectrogram_config(spec: TrainingRunSpec) -> SpectrogramConfig:
@@ -170,6 +282,8 @@ def execute_training(
             debug=False,
             log_dir=str(run_dir / "logs"),
         )
+        metrics_collector = _TrainingMetricsCollector()
+        training_logger.addHandler(metrics_collector)
 
         training_logger.info("Loading dataset: {}".format(spec.dataset_name))
         training_logger.info(
@@ -325,10 +439,51 @@ def execute_training(
         )
         training_logger.info("Model saved to {}".format(model_output_path))
 
+        history_payload = metrics_collector.build_history_payload()
+        best_metric_value, best_epoch = _best_metric_from_history(
+            history_payload,
+            training_config.val_metric,
+            training_config.val_metric_mode,
+        )
+        tensorboard_dir = (
+            getattr(trainer.writer, "log_dir", None)
+            if trainer.writer is not None
+            else summary_dir
+        )
+        write_json(
+            Path(summary_dir) / TRAINING_HISTORY_FILENAME,
+            history_payload,
+        )
+        write_json(
+            Path(summary_dir) / TRAINING_SUMMARY_FILENAME,
+            _build_training_summary_payload(
+                spec=spec,
+                total_epochs=training_config.max_epochs,
+                history=history_payload,
+                best_metric_name=training_config.val_metric,
+                best_metric_value=best_metric_value,
+                best_epoch=best_epoch,
+                model_output_path=model_output_path,
+                tensorboard_dir=tensorboard_dir,
+            ),
+        )
+
         run_manager.update_outputs(
             run_state.run_id,
             trained_model_path=str(model_output_path),
-            tensorboard_dir=summary_dir,
+            tensorboard_dir=tensorboard_dir,
+        )
+        run_manager.update_progress(
+            run_state.run_id,
+            total_epochs=training_config.max_epochs,
+            current_epoch=max(
+                (entry.get("epoch", -1) for entry in history_payload.get("train", [])),
+                default=-1,
+            )
+            + 1,
+            current_phase="completed",
+            best_metric_name=training_config.val_metric,
+            best_metric_value=best_metric_value,
         )
 
         run_state = run_manager.mark_completed(run_state.run_id)
