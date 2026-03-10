@@ -1,0 +1,80 @@
+{
+  "description": "Complete specification for an evaluation run.",
+  "properties": {
+    "prediction_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Prediction Run Id"
+    },
+    "predictions_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Predictions Dir"
+    },
+    "dataset_name": {
+      "title": "Dataset Name",
+      "type": "string"
+    },
+    "detection_thresholds": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Detection Thresholds",
+      "type": "array"
+    },
+    "split": {
+      "default": "test",
+      "enum": [
+        "train",
+        "val",
+        "test"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "sequence_length": {
+      "title": "Sequence Length",
+      "type": "integer"
+    },
+    "batch_size": {
+      "default": 16,
+      "title": "Batch Size",
+      "type": "integer"
+    },
+    "num_workers": {
+      "default": 4,
+      "title": "Num Workers",
+      "type": "integer"
+    },
+    "use_cuda": {
+      "default": true,
+      "title": "Use Cuda",
+      "type": "boolean"
+    },
+    "run_name": {
+      "default": "",
+      "title": "Run Name",
+      "type": "string"
+    }
+  },
+  "required": [
+    "dataset_name",
+    "sequence_length"
+  ],
+  "title": "EvaluationRunSpec",
+  "type": "object"
+}

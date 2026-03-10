@@ -1,0 +1,126 @@
+{
+  "description": "Configuration for SLURM batch script generation.",
+  "properties": {
+    "partition": {
+      "default": "kisski",
+      "title": "Partition",
+      "type": "string"
+    },
+    "nodes": {
+      "default": 1,
+      "title": "Nodes",
+      "type": "integer"
+    },
+    "ntasks": {
+      "default": 1,
+      "title": "Ntasks",
+      "type": "integer"
+    },
+    "cpus_per_task": {
+      "default": 8,
+      "title": "Cpus Per Task",
+      "type": "integer"
+    },
+    "gpus": {
+      "default": 2,
+      "title": "Gpus",
+      "type": "integer"
+    },
+    "gpu_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "A100",
+      "title": "Gpu Type"
+    },
+    "memory_gb": {
+      "default": 32,
+      "title": "Memory Gb",
+      "type": "integer"
+    },
+    "time_limit": {
+      "default": "00:15:00",
+      "title": "Time Limit",
+      "type": "string"
+    },
+    "account": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "kisski-alpaca-2",
+      "title": "Account"
+    },
+    "job_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Job Name"
+    },
+    "output_pattern": {
+      "default": "slurm-%j.out",
+      "title": "Output Pattern",
+      "type": "string"
+    },
+    "error_pattern": {
+      "default": "slurm-%j.err",
+      "title": "Error Pattern",
+      "type": "string"
+    },
+    "conda_env": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Conda Env"
+    },
+    "venv_path": {
+      "default": "/projects/extern/kisski/kisski-alpaca-2/dir.project/alpaca-pipelines/.venv",
+      "title": "Venv Path",
+      "type": "string"
+    },
+    "modules": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Modules",
+      "type": "array"
+    },
+    "extra_sbatch_lines": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Extra Sbatch Lines",
+      "type": "array"
+    },
+    "extra_env_vars": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Extra Env Vars",
+      "type": "object"
+    }
+  },
+  "title": "SlurmConfig",
+  "type": "object"
+}

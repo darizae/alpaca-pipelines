@@ -1,0 +1,105 @@
+{
+  "description": "Complete specification for an RF training run.",
+  "properties": {
+    "dataset_name": {
+      "title": "Dataset Name",
+      "type": "string"
+    },
+    "run_name": {
+      "default": "",
+      "title": "Run Name",
+      "type": "string"
+    },
+    "positive_class": {
+      "default": "target",
+      "title": "Positive Class",
+      "type": "string"
+    },
+    "random_state": {
+      "default": 1337,
+      "title": "Random State",
+      "type": "integer"
+    },
+    "n_estimators": {
+      "default": 400,
+      "title": "N Estimators",
+      "type": "integer"
+    },
+    "max_depth": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Depth"
+    },
+    "min_samples_split": {
+      "default": 2,
+      "title": "Min Samples Split",
+      "type": "integer"
+    },
+    "min_samples_leaf": {
+      "default": 1,
+      "title": "Min Samples Leaf",
+      "type": "integer"
+    },
+    "max_features": {
+      "anyOf": [
+        {
+          "enum": [
+            "sqrt",
+            "log2"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "sqrt",
+      "title": "Max Features"
+    },
+    "class_weight": {
+      "anyOf": [
+        {
+          "enum": [
+            "balanced",
+            "balanced_subsample"
+          ],
+          "type": "string"
+        },
+        {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": "balanced",
+      "title": "Class Weight"
+    },
+    "n_jobs": {
+      "default": -1,
+      "title": "N Jobs",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "dataset_name"
+  ],
+  "title": "RfTrainingRunSpec",
+  "type": "object"
+}

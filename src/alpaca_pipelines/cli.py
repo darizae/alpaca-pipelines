@@ -1,7 +1,7 @@
 """
 CLI entry point for alpaca-pipelines.
 
-This is a thin wrapper around ``PipelineAPI``.  All logic lives in the
+This is a thin wrapper around ``PipelineAPI``. All logic lives in the
 API layer; the CLI only handles argument parsing and console output.
 """
 
@@ -11,9 +11,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 from alpaca_pipelines.api import PipelineAPI
 from alpaca_pipelines.config import PipelineEnvironment
+from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
@@ -21,7 +23,7 @@ from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.training.config import TrainingRunSpec
 
 
-def _load_json_config(config_path: str) -> dict:  # type: ignore[type-arg]
+def _load_json_config(config_path: str) -> dict[str, Any]:
     path = Path(config_path)
     if not path.is_file():
         print("Config file not found: {}".format(config_path), file=sys.stderr)
@@ -43,25 +45,45 @@ def _get_api() -> PipelineAPI:
         sys.exit(1)
 
 
+def _emit_json(payload: Any) -> None:
+    sys.stdout.write(json.dumps(payload))
+    sys.stdout.write("\n")
+
+
+def _run_state_payload(run_state: RunState) -> dict[str, Any]:
+    return run_state.model_dump()
+
+
 def _cmd_create(args: argparse.Namespace) -> None:
     api = _get_api()
-    config_data = _load_json_config(args.config)
+    try:
+        config_data = _load_json_config(args.config)
 
-    if args.run_type == "training":
-        spec = TrainingRunSpec.model_validate(config_data)
-        run_state = api.create_training_run(spec)
-    elif args.run_type == "rf_training":
-        spec = RfTrainingRunSpec.model_validate(config_data)  # type: ignore[assignment]
-        run_state = api.create_rf_training_run(spec)  # type: ignore[arg-type]
-    elif args.run_type == "prediction":
-        spec = PredictionRunSpec.model_validate(config_data)  # type: ignore[assignment]
-        run_state = api.create_prediction_run(spec)  # type: ignore[arg-type]
-    elif args.run_type == "evaluation":
-        spec = EvaluationRunSpec.model_validate(config_data)  # type: ignore[assignment]
-        run_state = api.create_evaluation_run(spec)  # type: ignore[arg-type]
-    else:
-        print("Unknown run type: {}".format(args.run_type), file=sys.stderr)
+        if args.run_type == "training":
+            run_state = api.create_training_run(
+                TrainingRunSpec.model_validate(config_data)
+            )
+        elif args.run_type == "rf_training":
+            run_state = api.create_rf_training_run(
+                RfTrainingRunSpec.model_validate(config_data)
+            )
+        elif args.run_type == "prediction":
+            run_state = api.create_prediction_run(
+                PredictionRunSpec.model_validate(config_data)
+            )
+        elif args.run_type == "evaluation":
+            run_state = api.create_evaluation_run(
+                EvaluationRunSpec.model_validate(config_data)
+            )
+        else:
+            raise ValueError("Unknown run type: {}".format(args.run_type))
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
         sys.exit(1)
+
+    if args.json:
+        _emit_json(_run_state_payload(run_state))
+        return
 
     print("Created {} run: {}".format(run_state.run_type, run_state.run_id))
     print("  Run dir: {}".format(run_state.run_dir))
@@ -83,6 +105,10 @@ def _cmd_list(args: argparse.Namespace) -> None:
     status_filter = getattr(args, "status", None)
     runs = api.list_runs(run_type=run_type, status_filter=status_filter)
 
+    if args.json:
+        _emit_json({"runs": [_run_state_payload(run_state) for run_state in runs]})
+        return
+
     if not runs:
         print("No runs found.")
         return
@@ -101,18 +127,26 @@ def _cmd_inspect(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
         run_state = api.get_run_status(args.run_id)
-    except FileNotFoundError:
-        print("Run not found: {}".format(args.run_id), file=sys.stderr)
+    except FileNotFoundError as exc:
+        print(str(exc), file=sys.stderr)
         sys.exit(1)
+
+    if args.json:
+        _emit_json(_run_state_payload(run_state))
+        return
 
     print("Run:        {}".format(run_state.run_id))
     print("Type:       {}".format(run_state.run_type))
     print("Status:     {}".format(run_state.status))
     print("Created:    {}".format(run_state.created_at))
+    if run_state.submitted_at:
+        print("Submitted:  {}".format(run_state.submitted_at))
     if run_state.started_at:
         print("Started:    {}".format(run_state.started_at))
     if run_state.completed_at:
         print("Completed:  {}".format(run_state.completed_at))
+    if run_state.slurm_job_id:
+        print("Slurm job:  {}".format(run_state.slurm_job_id))
     if run_state.error_message:
         print("Error:      {}".format(run_state.error_message))
     print("Run dir:    {}".format(run_state.run_dir))
@@ -139,29 +173,58 @@ def _cmd_cancel(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
         run_state = api.cancel_run(args.run_id)
-        print("Cancelled run: {}".format(run_state.run_id))
-    except (FileNotFoundError, ValueError) as exc:
-        print("Cannot cancel: {}".format(exc), file=sys.stderr)
+    except (FileNotFoundError, RuntimeError, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
         sys.exit(1)
+
+    if args.json:
+        _emit_json(_run_state_payload(run_state))
+        return
+
+    print("Cancelled run: {}".format(run_state.run_id))
 
 
 def _cmd_generate_slurm(args: argparse.Namespace) -> None:
     api = _get_api()
-    slurm_config = None
-    if hasattr(args, "slurm_config") and args.slurm_config:
-        slurm_data = _load_json_config(args.slurm_config)
-        slurm_config = SlurmConfig.model_validate(slurm_data)
-
     try:
+        slurm_config = None
+        if args.slurm_config:
+            slurm_data = _load_json_config(args.slurm_config)
+            slurm_config = SlurmConfig.model_validate(slurm_data)
         script_path = api.generate_slurm_script(
             run_id=args.run_id,
             slurm_config=slurm_config,
         )
-        print("SLURM script generated: {}".format(script_path))
-        print("Submit with: sbatch {}".format(script_path))
-    except FileNotFoundError as exc:
-        print("Error: {}".format(exc), file=sys.stderr)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
         sys.exit(1)
+
+    if args.json:
+        _emit_json({"run_id": args.run_id, "script_path": str(script_path)})
+        return
+
+    print("SLURM script generated: {}".format(script_path))
+    print("Submit with: sbatch {}".format(script_path))
+
+
+def _cmd_submit(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        slurm_config = None
+        if args.slurm_config:
+            slurm_data = _load_json_config(args.slurm_config)
+            slurm_config = SlurmConfig.model_validate(slurm_data)
+        run_state = api.submit_run(args.run_id, slurm_config=slurm_config)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
+    if args.json:
+        _emit_json(_run_state_payload(run_state))
+        return
+
+    print("Submitted run: {}".format(run_state.run_id))
+    print("  Slurm job ID: {}".format(run_state.slurm_job_id))
 
 
 def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
@@ -177,8 +240,15 @@ def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
         print("Export failed: {}".format(exc), file=sys.stderr)
         sys.exit(1)
 
+    if args.json:
+        _emit_json(summary)
+        return
+
     selection_tables_dir = summary.get("selection_tables_dir")
-    summary_path = str(Path(selection_tables_dir) / "selection_tables_summary.json")  # type: ignore[arg-type]
+    if not isinstance(selection_tables_dir, str):
+        print("Export failed: missing selection_tables_dir", file=sys.stderr)
+        sys.exit(1)
+    summary_path = str(Path(selection_tables_dir) / "selection_tables_summary.json")
     print("Selection tables exported.")
     print("  Dir:      {}".format(selection_tables_dir))
     print("  Summary:  {}".format(summary_path))
@@ -189,6 +259,25 @@ def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
         for entry in files:
             if isinstance(entry, dict) and "selection_table" in entry:
                 print("    {}".format(entry["selection_table"]))
+
+
+def _cmd_migrate_backend_meta(args: argparse.Namespace) -> None:
+    api = _get_api()
+    runs_root = Path(args.runs_root) if args.runs_root else None
+    try:
+        summary = api.migrate_backend_meta(runs_root=runs_root)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
+    payload = summary.to_dict()
+    if args.json:
+        _emit_json(payload)
+        return
+
+    print("Migration complete.")
+    print("  Migrated: {}".format(len(summary.migrated)))
+    print("  Skipped: {}".format(len(summary.skipped)))
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -209,6 +298,7 @@ def _build_parser() -> argparse.ArgumentParser:
         required=True,
         help="Path to JSON configuration file for the run",
     )
+    create_parser.add_argument("--json", action="store_true")
 
     execute_parser = subparsers.add_parser("execute", help="Execute a pipeline run")
     execute_parser.add_argument("--run-id", required=True, help="Run ID to execute")
@@ -226,12 +316,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Filter by status",
     )
+    list_parser.add_argument("--json", action="store_true")
 
     inspect_parser = subparsers.add_parser("inspect", help="Inspect a pipeline run")
     inspect_parser.add_argument("--run-id", required=True, help="Run ID to inspect")
+    inspect_parser.add_argument("--json", action="store_true")
 
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a pipeline run")
     cancel_parser.add_argument("--run-id", required=True, help="Run ID to cancel")
+    cancel_parser.add_argument("--json", action="store_true")
 
     slurm_parser = subparsers.add_parser("generate-slurm", help="Generate a SLURM batch script")
     slurm_parser.add_argument("--run-id", required=True, help="Run ID")
@@ -240,6 +333,16 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to SLURM config JSON (optional)",
     )
+    slurm_parser.add_argument("--json", action="store_true")
+
+    submit_parser = subparsers.add_parser("submit", help="Submit a created pipeline run")
+    submit_parser.add_argument("--run-id", required=True, help="Run ID")
+    submit_parser.add_argument(
+        "--slurm-config",
+        default=None,
+        help="Path to SLURM config JSON (optional)",
+    )
+    submit_parser.add_argument("--json", action="store_true")
 
     export_tables_parser = subparsers.add_parser(
         "export-selection-tables",
@@ -249,6 +352,14 @@ def _build_parser() -> argparse.ArgumentParser:
     export_tables_parser.add_argument("--freq-low-hz", type=int, default=0)
     export_tables_parser.add_argument("--freq-high-hz", type=int, default=4000)
     export_tables_parser.add_argument("--use-rf-filtered", action="store_true")
+    export_tables_parser.add_argument("--json", action="store_true")
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-backend-meta",
+        help="Backfill legacy backend_meta.json fields into run_state.json",
+    )
+    migrate_parser.add_argument("--runs-root", default=None)
+    migrate_parser.add_argument("--json", action="store_true")
 
     return parser
 
@@ -268,7 +379,9 @@ def main() -> None:
         "inspect": _cmd_inspect,
         "cancel": _cmd_cancel,
         "generate-slurm": _cmd_generate_slurm,
+        "submit": _cmd_submit,
         "export-selection-tables": _cmd_export_selection_tables,
+        "migrate-backend-meta": _cmd_migrate_backend_meta,
     }
 
     handler = command_handlers.get(args.command)

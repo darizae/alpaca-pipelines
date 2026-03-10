@@ -2,7 +2,7 @@
 
 Mid-level orchestrator for bioacoustics deep learning pipelines.
 Bridges the low-level `bioacoustics-dl-toolbox` mechanics with a
-folder-based HPC persistence layer and a future backend/REST API.
+folder-based HPC persistence layer and the `alpaca-ui` backend over a CLI boundary.
 
 ## Scope
 
@@ -12,6 +12,8 @@ folder-based HPC persistence layer and a future backend/REST API.
 - **RF filter** post-processing on prediction results
 - **Post-processing** and export (Raven selection tables, aggregation)
 - **SLURM** batch script generation for HPC execution
+- **CLI JSON contract** for service-to-service integration
+- **Run-state migration** from legacy `backend_meta.json` sidecars
 
 ## Architecture
 
@@ -82,6 +84,9 @@ Required environment variables:
 # Create a training run
 make create-training-run RUN_CONFIG=configs/training_example.json
 
+# Submit a created run
+alpaca-pipelines submit --run-id <uuid>
+
 # Execute a run
 make execute-run RUN_ID=<uuid>
 
@@ -93,7 +98,25 @@ make inspect-run RUN_ID=<uuid>
 
 # Generate SLURM script
 make generate-slurm RUN_ID=<uuid>
+
+# Migrate legacy submission metadata into run_state.json
+alpaca-pipelines migrate-backend-meta --json
 ```
+
+### CLI JSON mode
+
+The UI-facing commands support `--json` and write exactly one JSON document to stdout:
+
+- `create`
+- `submit`
+- `inspect`
+- `list`
+- `cancel`
+- `generate-slurm`
+- `export-selection-tables`
+- `migrate-backend-meta`
+
+For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
 
 ### Post-processing: Raven selection tables (prediction runs)
 
@@ -202,6 +225,20 @@ created → submitted → running → completed
 
 Each run is stored as a folder under `ALPACA_RUNS_ROOT/<run_type>/<run_id>/`
 containing `run_state.json`, `logs/`, `outputs/`, and `slurm/`.
+
+`submitted_at` and `slurm_job_id` are persisted by `alpaca-pipelines` in `run_state.json`.
+`backend_meta.json` is a legacy migration input only and is not part of the supported run-state contract.
+
+## Contracts
+
+Committed JSON Schemas for the UI-facing contracts live under `contracts/json-schema/`:
+
+- `TrainingRunSpec.json`
+- `PredictionRunSpec.json`
+- `EvaluationRunSpec.json`
+- `RfTrainingRunSpec.json`
+- `SlurmConfig.json`
+- `RunState.json`
 
 ## Development
 

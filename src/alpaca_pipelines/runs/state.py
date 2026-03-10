@@ -39,10 +39,18 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-def transition_to_submitted(state: RunState) -> RunState:
+def transition_to_submitted(state: RunState, slurm_job_id: str) -> RunState:
     """Transition a run from created to submitted."""
     _validate_transition(state.status, "submitted")
-    return state.model_copy(update={"status": "submitted", "submitted_at": _now_iso()})
+    if state.slurm_job_id is not None:
+        raise ValueError("Run already has slurm_job_id: {}".format(state.slurm_job_id))
+    return state.model_copy(
+        update={
+            "status": "submitted",
+            "submitted_at": _now_iso(),
+            "slurm_job_id": slurm_job_id,
+        }
+    )
 
 
 def transition_to_running(state: RunState) -> RunState:
