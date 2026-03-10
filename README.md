@@ -229,6 +229,38 @@ containing `run_state.json`, `logs/`, `outputs/`, and `slurm/`.
 `submitted_at` and `slurm_job_id` are persisted by `alpaca-pipelines` in `run_state.json`.
 `backend_meta.json` is a legacy migration input only and is not part of the supported run-state contract.
 
+### Output contract by run type
+
+Output paths in `run_state.json` are routine-specific and should only be populated for the active run type.
+
+- `training`
+  - `outputs/model/`
+  - `outputs/summaries/`
+  - `outputs/summaries/training_summary.json`
+  - `outputs/summaries/training_history.json`
+  - `outputs.tensorboard_dir`
+- `prediction`
+  - `outputs/predictions/`
+  - `outputs/predictions/prediction_summary.json`
+  - `outputs/predictions/selection_tables/selection_tables_summary.json` after export
+- `evaluation`
+  - `outputs/evaluation/`
+  - `outputs/evaluation/evaluation_report.json`
+- `rf_training`
+  - `outputs/model/`
+  - `outputs/summaries/`
+  - `outputs/summaries/rf_training_report.json`
+
+For training runs, `run_state.progress` must reflect terminal progress on completion, including:
+
+- `current_epoch`
+- `total_epochs`
+- `current_phase`
+- `best_metric_name`
+- `best_metric_value`
+
+The UI may recover older completed training runs from structured logs, but that is compatibility for existing historical runs, not the output contract for new runs.
+
 ## Contracts
 
 Committed JSON Schemas for the UI-facing contracts live under `contracts/json-schema/`:
