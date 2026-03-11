@@ -1,8 +1,8 @@
 # alpaca-pipelines
 
-Mid-level orchestrator for bioacoustics deep learning pipelines.
-Bridges the low-level `bioacoustics-dl-toolbox` mechanics with a
-folder-based HPC persistence layer and the `alpaca-ui` backend over a CLI boundary.
+HPC-side workflow host for Alpaca bioacoustics processing.
+Owns the contract, persistence, and execution boundary for collection standardization,
+dataset building, training, prediction, evaluation, RF training, and postprocessing.
 
 ## Scope
 
@@ -10,6 +10,8 @@ folder-based HPC persistence layer and the `alpaca-ui` backend over a CLI bounda
 - **Prediction** (inference) on audio tapes via sliding window
 - **Evaluation** of predictions against ground truth
 - **RF filter** post-processing on prediction results
+- **Collection standardization** (scan, rename planning/apply, index generation)
+- **Dataset building** and review workflows
 - **Post-processing** and export (Raven selection tables, aggregation)
 - **SLURM** batch script generation for HPC execution
 - **CLI JSON contract** for service-to-service integration
@@ -30,9 +32,6 @@ folder-based HPC persistence layer and the `alpaca-ui` backend over a CLI bounda
 │  │            │  │  predict/ │  │  scripts)    │ │
 │  │            │  │  eval)    │  │              │ │
 │  └───────────┘  └──────────┘  └──────────────┘ │
-├─────────────────────────────────────────────────┤
-│  bioacoustics-dl-toolbox (low-level mechanics)   │
-├─────────────────────────────────────────────────┤
 │  HPC persistence layer (folders + JSON)          │
 │  ┌────────────┐ ┌────────────┐ ┌─────────────┐ │
 │  │ Collections │ │ Datasets   │ │ Runs root   │ │
@@ -49,9 +48,6 @@ folder-based HPC persistence layer and the `alpaca-ui` backend over a CLI bounda
 # Create and activate virtual environment
 python3.11 -m venv .venv
 source .venv/bin/activate
-
-# Install bioacoustics-dl-toolbox (local dev)
-pip install -e /path/to/bioacoustics-dl-toolbox
 
 # Install alpaca-pipelines
 pip install -e ".[dev]"
@@ -115,6 +111,17 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `generate-slurm`
 - `export-selection-tables`
 - `migrate-backend-meta`
+- `standardizer-scan`
+- `standardizer-plan`
+- `standardizer-apply`
+- `standardizer-index`
+- `standardizer-job`
+- `standardizer-status`
+- `dataset-build`
+- `dataset-prepare-review`
+- `dataset-apply-review`
+- `dataset-job`
+- `dataset-status`
 
 For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
 

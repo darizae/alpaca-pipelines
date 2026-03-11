@@ -84,10 +84,7 @@ class RunManager:
         if run_type == "prediction":
             ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR)
             ensure_directory(
-                run_dir
-                / OUTPUTS_DIR
-                / PREDICTIONS_DIR
-                / PREDICTION_SELECTION_TABLES_DIR
+                run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR
             )
         if run_type == "evaluation":
             ensure_directory(run_dir / OUTPUTS_DIR / EVALUATION_DIR)
@@ -152,7 +149,13 @@ class RunManager:
 
     def find_run(self, run_id: str) -> RunState:
         """Find a run by ID, searching across all run types."""
-        for run_type_candidate in ("training", "prediction", "evaluation", "rf_training"):
+        run_types: tuple[RunType, ...] = (
+            "training",
+            "prediction",
+            "evaluation",
+            "rf_training",
+        )
+        for run_type_candidate in run_types:
             state_path = self._state_path(run_type_candidate, run_id)
             if state_path.is_file():
                 return self.load_state(run_type_candidate, run_id)

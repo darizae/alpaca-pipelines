@@ -545,6 +545,6 @@ Hard rules:
 
 ## 6) Contract reminders (implementation constraints)
 
-* `alpaca-pipelines` MUST NOT import or couple to `alpaca-dataset-builder` or `alpaca-audio-standardizer`.
-* It reads `manifest.json`, `splits/*.csv`, and `merged_index.json` as stable public interfaces.
+* `alpaca-pipelines` owns the collection-standardization and dataset-building implementations inside this repo.
+* `manifest.json`, `splits/*.csv`, and `merged_index.json` remain stable public interfaces for the UI/backend boundary.
 * API-first design: all operations are available as programmatic methods on `PipelineAPI`. The CLI is a thin wrapper around the API. The future backend drives the API directly.

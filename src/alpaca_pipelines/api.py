@@ -22,6 +22,7 @@ from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_me
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.slurm.generator import generate_slurm_script
 from alpaca_pipelines.training.config import TrainingRunSpec
+from alpaca_pipelines.workflow_ops import WorkflowOperationManager
 
 
 class PipelineAPI:
@@ -42,6 +43,7 @@ class PipelineAPI:
         environment.validate()
         self.environment = environment
         self.run_manager = RunManager(environment.runs_root)
+        self.workflow_ops = WorkflowOperationManager(environment)
 
     # ------------------------------------------------------------------
     # Run creation
@@ -221,6 +223,155 @@ class PipelineAPI:
         """Backfill legacy backend_meta.json fields into run_state.json."""
         target_root = runs_root if runs_root is not None else self.environment.runs_root
         return migrate_backend_meta(target_root, self.run_manager)
+
+    # ------------------------------------------------------------------
+    # Collection standardization / dataset workflows
+    # ------------------------------------------------------------------
+
+    def start_standardizer_scan(self) -> dict[str, Any]:
+        record = self.workflow_ops.start(
+            workflow="standardizer",
+            kind="scan",
+            spec={},
+            artifact_name="scan_report.json",
+        )
+        return record.model_dump()
+
+    def start_standardizer_plan(self, identity_map_path: str) -> dict[str, Any]:
+        self.workflow_ops.ensure_no_active("standardizer", "plan")
+        record = self.workflow_ops.start(
+            workflow="standardizer",
+            kind="plan",
+            spec={"identity_map_path": identity_map_path},
+            artifact_name="plan.json",
+        )
+        return record.model_dump()
+
+    def start_standardizer_apply(
+        self,
+        *,
+        plan_job_id: str,
+        confirmation_phrase: str,
+    ) -> dict[str, Any]:
+        self.workflow_ops.ensure_no_active("standardizer", "apply")
+        record = self.workflow_ops.start(
+            workflow="standardizer",
+            kind="apply",
+            spec={
+                "plan_job_id": plan_job_id,
+                "confirmation_phrase": confirmation_phrase,
+            },
+            artifact_name="apply_result.json",
+            rollback_artifact_name="rollback_artifact.json",
+        )
+        return record.model_dump()
+
+    def start_standardizer_index(
+        self,
+        *,
+        identity_map_path: str,
+        min_quality: int,
+    ) -> dict[str, Any]:
+        self.workflow_ops.ensure_no_active("standardizer", "index")
+        record = self.workflow_ops.start(
+            workflow="standardizer",
+            kind="index",
+            spec={
+                "identity_map_path": identity_map_path,
+                "min_quality": min_quality,
+            },
+        )
+        return record.model_dump()
+
+    def get_workflow_operation(self, job_id: str) -> dict[str, Any]:
+        return self.workflow_ops.get(job_id).model_dump()
+
+    def get_standardizer_status(self) -> dict[str, Any]:
+        return {
+            "last_scan": self._dump_latest_operation("standardizer", "scan"),
+            "last_plan": self._dump_latest_operation("standardizer", "plan"),
+            "last_apply": self._dump_latest_operation("standardizer", "apply"),
+            "last_index": self._dump_latest_operation("standardizer", "index"),
+            "active_jobs": [
+                record.model_dump()
+                for record in self.workflow_ops.list("standardizer")
+                if record.status in {"pending", "running"}
+            ],
+        }
+
+    def start_dataset_build(
+        self,
+        *,
+        strategy_name: str,
+        strategy_config: dict[str, Any],
+    ) -> dict[str, Any]:
+        self.workflow_ops.ensure_no_active(
+            "dataset_builder",
+            "build",
+            metadata_key="strategy_name",
+            metadata_value=strategy_name,
+        )
+        record = self.workflow_ops.start(
+            workflow="dataset_builder",
+            kind="build",
+            spec={
+                "strategy_name": strategy_name,
+                "strategy_config": strategy_config,
+            },
+            metadata={"strategy_name": strategy_name},
+        )
+        return record.model_dump()
+
+    def start_prepare_review(self, dataset_name: str) -> dict[str, Any]:
+        self._ensure_no_active_review(dataset_name)
+        record = self.workflow_ops.start(
+            workflow="dataset_builder",
+            kind="prepare_review",
+            spec={"dataset_name": dataset_name},
+            metadata={"dataset_name": dataset_name},
+        )
+        return record.model_dump()
+
+    def start_apply_review(self, dataset_name: str, review_table_path: str) -> dict[str, Any]:
+        self._ensure_no_active_review(dataset_name)
+        record = self.workflow_ops.start(
+            workflow="dataset_builder",
+            kind="apply_review",
+            spec={
+                "dataset_name": dataset_name,
+                "review_table_path": review_table_path,
+            },
+            metadata={"dataset_name": dataset_name},
+        )
+        return record.model_dump()
+
+    def get_dataset_builder_status(self) -> dict[str, Any]:
+        return {
+            "last_build": self._dump_latest_operation("dataset_builder", "build"),
+            "last_prepare_review": self._dump_latest_operation("dataset_builder", "prepare_review"),
+            "last_apply_review": self._dump_latest_operation("dataset_builder", "apply_review"),
+            "active_jobs": [
+                record.model_dump()
+                for record in self.workflow_ops.list("dataset_builder")
+                if record.status in {"pending", "running"}
+            ],
+        }
+
+    def execute_workflow_operation(self, job_dir: str) -> None:
+        self.workflow_ops.run_worker(Path(job_dir))
+
+    def _dump_latest_operation(self, workflow: str, kind: str) -> dict[str, Any] | None:
+        record = self.workflow_ops.latest(workflow, kind)
+        return record.model_dump() if record is not None else None
+
+    def _ensure_no_active_review(self, dataset_name: str) -> None:
+        for kind in ("prepare_review", "apply_review"):
+            self.workflow_ops.ensure_no_active(
+                "dataset_builder",
+                kind,
+                metadata_key="dataset_name",
+                metadata_value=dataset_name,
+            )
 
     # ------------------------------------------------------------------
     # Post-processing

@@ -101,6 +101,17 @@ class DatasetManifest(BaseModel):
 
 RunType = Literal["training", "prediction", "evaluation", "rf_training"]
 RunStatus = Literal["created", "submitted", "running", "completed", "failed", "cancelled"]
+WorkflowName = Literal["standardizer", "dataset_builder"]
+WorkflowOperationKind = Literal[
+    "scan",
+    "plan",
+    "apply",
+    "index",
+    "build",
+    "prepare_review",
+    "apply_review",
+]
+WorkflowOperationStatus = Literal["pending", "running", "completed", "failed"]
 
 
 class RunOutputs(BaseModel):
@@ -149,6 +160,25 @@ class RunState(BaseModel):
     error_message: str | None = None
     slurm_job_id: str | None = None
     run_dir: str = ""
+
+
+class WorkflowOperation(BaseModel):
+    """Persistent state of a non-run workflow operation."""
+
+    job_id: str
+    workflow: WorkflowName
+    kind: WorkflowOperationKind
+    status: WorkflowOperationStatus = "pending"
+    created_at: str
+    started_at: str
+    finished_at: str | None = None
+    job_dir: str
+    artifact_path: str | None = None
+    rollback_artifact_path: str | None = None
+    result_summary: dict[str, Any] | None = None
+    error: str | None = None
+    error_kind: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
