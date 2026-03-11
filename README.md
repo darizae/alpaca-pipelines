@@ -72,6 +72,11 @@ Required environment variables:
 | `ALPACA_DATASETS_ROOT`   | Root of built datasets (strategy directories)     |
 | `ALPACA_RUNS_ROOT`       | Root for pipeline run state and outputs           |
 
+UI-only catalog boundary:
+
+- `alpaca-pipelines` remains filesystem-only and database-unaware.
+- If `alpaca-ui` uses PostgreSQL for metadata projection, it must ingest from these filesystem contracts.
+
 ## Usage
 
 ### CLI
