@@ -60,21 +60,13 @@ def _cmd_create(args: argparse.Namespace) -> None:
         config_data = _load_json_config(args.config)
 
         if args.run_type == "training":
-            run_state = api.create_training_run(
-                TrainingRunSpec.model_validate(config_data)
-            )
+            run_state = api.create_training_run(TrainingRunSpec.model_validate(config_data))
         elif args.run_type == "rf_training":
-            run_state = api.create_rf_training_run(
-                RfTrainingRunSpec.model_validate(config_data)
-            )
+            run_state = api.create_rf_training_run(RfTrainingRunSpec.model_validate(config_data))
         elif args.run_type == "prediction":
-            run_state = api.create_prediction_run(
-                PredictionRunSpec.model_validate(config_data)
-            )
+            run_state = api.create_prediction_run(PredictionRunSpec.model_validate(config_data))
         elif args.run_type == "evaluation":
-            run_state = api.create_evaluation_run(
-                EvaluationRunSpec.model_validate(config_data)
-            )
+            run_state = api.create_evaluation_run(EvaluationRunSpec.model_validate(config_data))
         else:
             raise ValueError("Unknown run type: {}".format(args.run_type))
     except Exception as exc:
@@ -280,6 +272,135 @@ def _cmd_migrate_backend_meta(args: argparse.Namespace) -> None:
     print("  Skipped: {}".format(len(summary.skipped)))
 
 
+def _cmd_standardizer_scan(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_standardizer_scan()
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_standardizer_plan(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_standardizer_plan(args.identity_map)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_standardizer_apply(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_standardizer_apply(
+            plan_job_id=args.plan_job_id,
+            confirmation_phrase=args.confirmation_phrase,
+        )
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_standardizer_index(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_standardizer_index(
+            identity_map_path=args.identity_map,
+            min_quality=args.min_source_quality_to_keep,
+        )
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_standardizer_job(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.get_workflow_operation(args.job_id)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_standardizer_status(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.get_standardizer_status()
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_dataset_build(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        config_data = _load_json_config(args.config)
+        payload = api.start_dataset_build(
+            strategy_name=args.strategy_name,
+            strategy_config=config_data,
+        )
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_dataset_prepare_review(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_prepare_review(args.dataset_name)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_dataset_apply_review(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_apply_review(args.dataset_name, args.review_table)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_dataset_job(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.get_workflow_operation(args.job_id)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_dataset_status(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.get_dataset_builder_status()
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
+def _cmd_execute_operation(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        api.execute_workflow_operation(args.job_dir)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="alpaca-pipelines",
@@ -361,6 +482,58 @@ def _build_parser() -> argparse.ArgumentParser:
     migrate_parser.add_argument("--runs-root", default=None)
     migrate_parser.add_argument("--json", action="store_true")
 
+    standardizer_scan_parser = subparsers.add_parser("standardizer-scan")
+    standardizer_scan_parser.add_argument("--json", action="store_true")
+
+    standardizer_plan_parser = subparsers.add_parser("standardizer-plan")
+    standardizer_plan_parser.add_argument("--identity-map", required=True)
+    standardizer_plan_parser.add_argument("--json", action="store_true")
+
+    standardizer_apply_parser = subparsers.add_parser("standardizer-apply")
+    standardizer_apply_parser.add_argument("--plan-job-id", required=True)
+    standardizer_apply_parser.add_argument("--confirmation-phrase", required=True)
+    standardizer_apply_parser.add_argument("--json", action="store_true")
+
+    standardizer_index_parser = subparsers.add_parser("standardizer-index")
+    standardizer_index_parser.add_argument("--identity-map", required=True)
+    standardizer_index_parser.add_argument(
+        "--min-source-quality-to-keep",
+        type=int,
+        default=1,
+    )
+    standardizer_index_parser.add_argument("--json", action="store_true")
+
+    standardizer_job_parser = subparsers.add_parser("standardizer-job")
+    standardizer_job_parser.add_argument("--job-id", required=True)
+    standardizer_job_parser.add_argument("--json", action="store_true")
+
+    standardizer_status_parser = subparsers.add_parser("standardizer-status")
+    standardizer_status_parser.add_argument("--json", action="store_true")
+
+    dataset_build_parser = subparsers.add_parser("dataset-build")
+    dataset_build_parser.add_argument("--strategy-name", required=True)
+    dataset_build_parser.add_argument("--config", required=True)
+    dataset_build_parser.add_argument("--json", action="store_true")
+
+    dataset_prepare_parser = subparsers.add_parser("dataset-prepare-review")
+    dataset_prepare_parser.add_argument("--dataset-name", required=True)
+    dataset_prepare_parser.add_argument("--json", action="store_true")
+
+    dataset_apply_parser = subparsers.add_parser("dataset-apply-review")
+    dataset_apply_parser.add_argument("--dataset-name", required=True)
+    dataset_apply_parser.add_argument("--review-table", required=True)
+    dataset_apply_parser.add_argument("--json", action="store_true")
+
+    dataset_job_parser = subparsers.add_parser("dataset-job")
+    dataset_job_parser.add_argument("--job-id", required=True)
+    dataset_job_parser.add_argument("--json", action="store_true")
+
+    dataset_status_parser = subparsers.add_parser("dataset-status")
+    dataset_status_parser.add_argument("--json", action="store_true")
+
+    execute_operation_parser = subparsers.add_parser("_execute-operation")
+    execute_operation_parser.add_argument("--job-dir", required=True)
+
     return parser
 
 
@@ -382,6 +555,18 @@ def main() -> None:
         "submit": _cmd_submit,
         "export-selection-tables": _cmd_export_selection_tables,
         "migrate-backend-meta": _cmd_migrate_backend_meta,
+        "standardizer-scan": _cmd_standardizer_scan,
+        "standardizer-plan": _cmd_standardizer_plan,
+        "standardizer-apply": _cmd_standardizer_apply,
+        "standardizer-index": _cmd_standardizer_index,
+        "standardizer-job": _cmd_standardizer_job,
+        "standardizer-status": _cmd_standardizer_status,
+        "dataset-build": _cmd_dataset_build,
+        "dataset-prepare-review": _cmd_dataset_prepare_review,
+        "dataset-apply-review": _cmd_dataset_apply_review,
+        "dataset-job": _cmd_dataset_job,
+        "dataset-status": _cmd_dataset_status,
+        "_execute-operation": _cmd_execute_operation,
     }
 
     handler = command_handlers.get(args.command)

@@ -10,7 +10,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = {text = "GPL-3.0"}
 dependencies = [
-    "bioacoustics-dl-toolbox",
     "pydantic>=2.7.0",
     "pre-commit>=3.7",
     "numpy>=1.26.0",
@@ -39,6 +38,7 @@ where = ["src"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = ["src/bioacoustics_dl_toolbox"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
@@ -49,13 +49,19 @@ strict = true
 warn_return_any = true
 warn_unused_configs = true
 plugins = ["pydantic.mypy"]
+exclude = "^src/bioacoustics_dl_toolbox/"
 
 [[tool.mypy.overrides]]
 module = [
-    "bioacoustics-dl-toolbox @ file:../bioacoustics-dl-toolbox",
     "torch.*",
     "soundfile.*",
     "tensorboardX.*",
     "sklearn.*",
+    "joblib.*",
+    "bioacoustics_dl_toolbox.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["bioacoustics_dl_toolbox.*"]
+ignore_errors = true

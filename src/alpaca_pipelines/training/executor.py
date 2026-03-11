@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import torch
 import torch.nn as nn
@@ -44,8 +44,7 @@ from alpaca_pipelines.training.config import TrainingRunSpec
 logger = logging.getLogger(__name__)
 
 _SCALAR_LOG_PATTERN = re.compile(
-    r"^(?P<phase>train|val|test)\|(?P<epoch>\d+)"
-    r"(?P<metrics>(?:\|[a-z0-9_]+:[^|]+)+)$"
+    r"^(?P<phase>train|val|test)\|(?P<epoch>\d+)" r"(?P<metrics>(?:\|[a-z0-9_]+:[^|]+)+)$"
 )
 
 
@@ -84,11 +83,7 @@ class _TrainingMetricsCollector(logging.Handler):
         self.history[match.group("phase")].append(metrics)
 
     def build_history_payload(self) -> dict[str, Any]:
-        return {
-            phase: entries
-            for phase, entries in self.history.items()
-            if entries
-        }
+        return {phase: entries for phase, entries in self.history.items() if entries}
 
 
 def _best_metric_from_history(
@@ -338,7 +333,7 @@ def execute_training(
         encoder = ResidualEncoder(encoder_config)
         classifier_config = _build_classifier_config(spec, encoder)
         classifier = Classifier(classifier_config)
-        model = nn.Sequential(encoder, classifier)
+        model: nn.Module = nn.Sequential(encoder, classifier)
 
         training_logger.info(
             "Model: ResNet-{} encoder, {} classifier ({} classes)".format(
@@ -416,7 +411,7 @@ def execute_training(
             test_loader=test_loader,
             loss_fn=loss_fn,
             optimizer=optimizer,
-            scheduler=scheduler,
+            scheduler=cast(Any, scheduler),
             n_epochs=training_config.max_epochs,
             val_interval=training_config.epochs_per_eval,
             patience_early_stopping=training_config.early_stopping_patience_epochs,
@@ -446,9 +441,7 @@ def execute_training(
             training_config.val_metric_mode,
         )
         tensorboard_dir = (
-            getattr(trainer.writer, "log_dir", None)
-            if trainer.writer is not None
-            else summary_dir
+            getattr(trainer.writer, "log_dir", None) if trainer.writer is not None else summary_dir
         )
         write_json(
             Path(summary_dir) / TRAINING_HISTORY_FILENAME,
