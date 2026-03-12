@@ -4,7 +4,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from alpaca_pipelines.api import PipelineAPI
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.io_utils import read_json, write_json
@@ -70,16 +69,12 @@ def test_cancel_submitted_run_calls_scancel_and_marks_cancelled(
     api.run_manager.mark_submitted(run_state.run_id, "98765")
     calls: list[list[str]] = []
 
-    def _fake_run(
-        *args: object, **kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
+    def _fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
         del kwargs
         command = args[0]
         assert isinstance(command, list)
         calls.append(command)
-        return subprocess.CompletedProcess(
-            args=command, returncode=0, stdout="", stderr=""
-        )
+        return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("alpaca_pipelines.api.subprocess.run", _fake_run)
 
@@ -164,3 +159,41 @@ def test_migrate_backend_meta_fails_when_sidecar_exists_without_run_state(
 
     with pytest.raises(ValueError, match="Inconsistent backend_meta migration state"):
         api.migrate_backend_meta()
+
+
+def test_fail_workflow_operation_marks_pending_job_failed(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    operation = api.start_dataset_build(
+        strategy_name="dataset-a",
+        strategy_config={
+            "split_strategy": "clipwise_balanced",
+            "seed": 42,
+            "min_quality": 2,
+            "noise_per_positive": 1.0,
+            "noise_mining": {
+                "attempts_per_slot": 20,
+                "source_category_dirs": ["clips_labelled"],
+                "low_quality_as_negative": True,
+                "low_quality_threshold": 1,
+            },
+            "split_fractions": [0.7, 0.15, 0.15],
+            "duration_tolerance_s": 0.1,
+            "review_gap_s": 0.5,
+            "freq_low_hz": 0,
+            "freq_high_hz": 4000,
+        },
+    )
+
+    failed = api.fail_workflow_operation(
+        job_id=operation["job_id"],
+        error="Marked failed by operator as stale.",
+        error_kind="StaleOperation",
+    )
+
+    persisted = read_json(Path(operation["job_dir"]) / "operation.json")
+    assert failed["status"] == "failed"
+    assert failed["error_kind"] == "StaleOperation"
+    assert failed["finished_at"] is not None
+    assert persisted["status"] == "failed"

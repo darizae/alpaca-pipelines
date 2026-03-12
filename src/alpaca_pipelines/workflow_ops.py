@@ -103,6 +103,25 @@ class WorkflowOperationManager:
         state_path = self._find_state_path(job_id)
         return WorkflowOperation.model_validate(read_json(state_path))
 
+    def fail(self, job_id: str, *, error: str, error_kind: str) -> WorkflowOperation:
+        state_path = self._find_state_path(job_id)
+        operation = WorkflowOperation.model_validate(read_json(state_path))
+        if operation.status not in {"pending", "running"}:
+            raise ValueError(
+                "Cannot fail workflow operation {}: status is {} "
+                "(expected pending or running)".format(job_id, operation.status)
+            )
+        operation = operation.model_copy(
+            update={
+                "status": "failed",
+                "finished_at": _now_iso(),
+                "error": error,
+                "error_kind": error_kind,
+            }
+        )
+        write_json(state_path, operation.model_dump())
+        return operation
+
     def list(self, workflow: str, kind: str | None = None) -> list[WorkflowOperation]:
         workflow_root = self.root / workflow
         if not workflow_root.is_dir():
