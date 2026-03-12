@@ -299,6 +299,17 @@ class PipelineAPI:
             error_kind=error_kind,
         ).model_dump()
 
+    def delete_failed_workflow_operation(self, *, job_id: str) -> dict[str, Any]:
+        operation = self.workflow_ops.delete_failed(job_id)
+        return {
+            "job_id": operation.job_id,
+            "workflow": operation.workflow,
+            "kind": operation.kind,
+            "status": operation.status,
+            "job_dir": operation.job_dir,
+            "deleted": True,
+        }
+
     def get_standardizer_status(self) -> dict[str, Any]:
         return {
             "last_scan": self._dump_latest_operation("standardizer", "scan"),

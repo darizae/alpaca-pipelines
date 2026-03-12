@@ -102,3 +102,39 @@ def test_fail_operation_json_writes_single_json_document(
     payload = json.loads(captured.out)
     assert payload["status"] == "failed"
     assert payload["error_kind"] == "StaleOperation"
+
+
+def test_delete_failed_operation_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        delete_failed_workflow_operation=lambda job_id: {
+            "job_id": job_id,
+            "workflow": "dataset_builder",
+            "kind": "build",
+            "status": "failed",
+            "job_dir": "/runs/operations/dataset_builder/build/id",
+            "deleted": True,
+        }
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "delete-failed-operation",
+            "--job-id",
+            "id",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["job_id"] == "id"
+    assert payload["deleted"] is True
