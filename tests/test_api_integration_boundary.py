@@ -197,3 +197,40 @@ def test_fail_workflow_operation_marks_pending_job_failed(
     assert failed["error_kind"] == "StaleOperation"
     assert failed["finished_at"] is not None
     assert persisted["status"] == "failed"
+
+
+def test_delete_failed_workflow_operation_removes_job_dir(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    operation = api.start_dataset_build(
+        strategy_name="dataset-a",
+        strategy_config={
+            "split_strategy": "clipwise_balanced",
+            "seed": 42,
+            "min_quality": 2,
+            "noise_per_positive": 1.0,
+            "noise_mining": {
+                "attempts_per_slot": 20,
+                "source_category_dirs": ["clips_labelled"],
+                "low_quality_as_negative": True,
+                "low_quality_threshold": 1,
+            },
+            "split_fractions": [0.7, 0.15, 0.15],
+            "duration_tolerance_s": 0.1,
+            "review_gap_s": 0.5,
+            "freq_low_hz": 0,
+            "freq_high_hz": 4000,
+        },
+    )
+    api.fail_workflow_operation(
+        job_id=operation["job_id"],
+        error="Marked failed by operator as stale.",
+        error_kind="StaleOperation",
+    )
+
+    deleted = api.delete_failed_workflow_operation(job_id=operation["job_id"])
+
+    assert deleted["job_id"] == operation["job_id"]
+    assert deleted["deleted"] is True
+    assert not Path(operation["job_dir"]).exists()

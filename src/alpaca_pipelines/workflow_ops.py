@@ -122,6 +122,25 @@ class WorkflowOperationManager:
         write_json(state_path, operation.model_dump())
         return operation
 
+    def delete_failed(self, job_id: str) -> WorkflowOperation:
+        state_path = self._find_state_path(job_id)
+        operation = WorkflowOperation.model_validate(read_json(state_path))
+        if operation.status != "failed":
+            raise ValueError(
+                "Cannot delete workflow operation {}: status is {} " "(expected failed)".format(
+                    job_id, operation.status
+                )
+            )
+        job_dir = Path(operation.job_dir)
+        if job_dir != state_path.parent:
+            raise ValueError(
+                "Cannot delete workflow operation {}: job_dir does not match state path".format(
+                    job_id
+                )
+            )
+        shutil.rmtree(job_dir)
+        return operation
+
     def list(self, workflow: str, kind: str | None = None) -> list[WorkflowOperation]:
         workflow_root = self.root / workflow
         if not workflow_root.is_dir():

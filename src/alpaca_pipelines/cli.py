@@ -415,6 +415,16 @@ def _cmd_fail_operation(args: argparse.Namespace) -> None:
     _emit_json(payload)
 
 
+def _cmd_delete_failed_operation(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.delete_failed_workflow_operation(job_id=args.job_id)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="alpaca-pipelines",
@@ -554,6 +564,10 @@ def _build_parser() -> argparse.ArgumentParser:
     fail_operation_parser.add_argument("--error", required=True)
     fail_operation_parser.add_argument("--json", action="store_true")
 
+    delete_failed_operation_parser = subparsers.add_parser("delete-failed-operation")
+    delete_failed_operation_parser.add_argument("--job-id", required=True)
+    delete_failed_operation_parser.add_argument("--json", action="store_true")
+
     return parser
 
 
@@ -588,6 +602,7 @@ def main() -> None:
         "dataset-status": _cmd_dataset_status,
         "_execute-operation": _cmd_execute_operation,
         "fail-operation": _cmd_fail_operation,
+        "delete-failed-operation": _cmd_delete_failed_operation,
     }
 
     handler = command_handlers.get(args.command)

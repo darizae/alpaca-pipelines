@@ -19,7 +19,7 @@ RUN_CONFIG ?=
         create-training-run create-prediction-run create-evaluation-run \
         execute-run list-runs inspect-run cancel-run \
         generate-slurm submit-run \
-        export-prediction-selection-tables clean-stale-workflow-job \
+        export-prediction-selection-tables clean-stale-workflow-job delete-failed-workflow-job \
         clean-run
 
 venv:
@@ -113,6 +113,10 @@ clean-stale-workflow-job: env-check
 	@test -n "$(JOB_ID)" || (echo "Usage: make clean-stale-workflow-job JOB_ID=<id> [ERROR_MESSAGE='...']"; exit 1)
 	@error_message="$${ERROR_MESSAGE:-Marked failed by operator as stale: no worker process and no result artifact.}"; \
 	$(VENV_PYTHON) -m alpaca_pipelines.cli fail-operation --job-id "$(JOB_ID)" --error-kind "StaleOperation" --error "$$error_message" --json
+
+delete-failed-workflow-job: env-check
+	@test -n "$(JOB_ID)" || (echo "Usage: make delete-failed-workflow-job JOB_ID=<id>"; exit 1)
+	@$(VENV_PYTHON) -m alpaca_pipelines.cli delete-failed-operation --job-id "$(JOB_ID)" --json
 
 # --- SLURM ---
 

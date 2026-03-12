@@ -168,6 +168,7 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `dataset-job`
 - `dataset-status`
 - `fail-operation`
+- `delete-failed-operation`
 
 For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
 
@@ -253,6 +254,16 @@ make clean-stale-workflow-job JOB_ID=<workflow-job-id>
 ```
 
 This writes a terminal `failed` state into the operation record so status surfaces stop reporting it as active.
+
+### Deleting a failed workflow job
+
+Once a workflow job is already in terminal `failed` state, remove its operation directory explicitly:
+
+```bash
+make delete-failed-workflow-job JOB_ID=<workflow-job-id>
+```
+
+This deletes the failed job directory under `ALPACA_RUNS_ROOT/operations/...`. It refuses to delete jobs unless their current status is `failed`.
 
 #### Python API: selection tables export (batch)
 
