@@ -15,7 +15,7 @@ ALPACA_RUNS_ROOT ?=
 RUN_CONFIG ?=
 
 .PHONY: venv install lint format typecheck test \
-        env-init env-check \
+        env-init env-check runtime-check \
         create-training-run create-prediction-run create-evaluation-run \
         execute-run list-runs inspect-run cancel-run \
         generate-slurm submit-run \
@@ -49,6 +49,17 @@ env-check:
 	@test -n "$(ALPACA_MERGED_INDEX)" || (echo "ALPACA_MERGED_INDEX missing in .env"; exit 1)
 	@test -n "$(ALPACA_DATASETS_ROOT)" || (echo "ALPACA_DATASETS_ROOT missing in .env"; exit 1)
 	@test -n "$(ALPACA_RUNS_ROOT)" || (echo "ALPACA_RUNS_ROOT missing in .env"; exit 1)
+
+runtime-check: env-check
+	@test -x "$(VENV_PYTHON)" || (echo "Missing virtualenv python at $(VENV_PYTHON). Run: make venv install"; exit 1)
+	@test -x ./.venv/bin/alpaca-pipelines || (echo "Missing CLI entrypoint at ./.venv/bin/alpaca-pipelines. Run: make install"; exit 1)
+	@repo_realpath="$$(realpath .)"; \
+	module_path="$$(ALPACA_COLLECTION_ROOT="$(ALPACA_COLLECTION_ROOT)" ALPACA_MERGED_INDEX="$(ALPACA_MERGED_INDEX)" ALPACA_DATASETS_ROOT="$(ALPACA_DATASETS_ROOT)" ALPACA_RUNS_ROOT="$(ALPACA_RUNS_ROOT)" $(VENV_PYTHON) -c 'import pathlib; import alpaca_pipelines; print(pathlib.Path(alpaca_pipelines.__file__).resolve())')"; \
+	case "$$module_path" in "$$repo_realpath"/*) ;; *) echo "alpaca_pipelines imports from $$module_path, not $$repo_realpath"; exit 1;; esac; \
+	shebang_target="$$(head -n 1 ./.venv/bin/alpaca-pipelines | sed 's/^#!//')"; \
+	case "$$shebang_target" in "$$repo_realpath"/*) ;; *) echo "CLI shebang points to $$shebang_target, not $$repo_realpath"; exit 1;; esac; \
+	ALPACA_COLLECTION_ROOT="$(ALPACA_COLLECTION_ROOT)" ALPACA_MERGED_INDEX="$(ALPACA_MERGED_INDEX)" ALPACA_DATASETS_ROOT="$(ALPACA_DATASETS_ROOT)" ALPACA_RUNS_ROOT="$(ALPACA_RUNS_ROOT)" $(VENV_PYTHON) -m alpaca_pipelines.cli dataset-status --json >/dev/null; \
+	echo "Runtime OK: $$module_path"
 
 # --- Run lifecycle ---
 
