@@ -54,6 +54,14 @@ pip install -e ".[dev]"
 pre-commit install
 ````
 
+On the HPC, do not launch runs or workflow operations until the runtime preflight passes:
+
+```bash
+make runtime-check
+```
+
+That command fails if the venv exists but `alpaca_pipelines` is not actually installed from the current checkout.
+
 ## Configuration
 
 Copy `.env.example` to `.env` and fill in the paths:
@@ -76,6 +84,38 @@ UI-only catalog boundary:
 
 - `alpaca-pipelines` remains filesystem-only and database-unaware.
 - If `alpaca-ui` uses PostgreSQL for metadata projection, it must ingest from these filesystem contracts.
+
+## HPC runtime preflight
+
+Before using `alpaca-ui` against a remote HPC checkout, verify the remote runtime from inside the `alpaca-pipelines` repo:
+
+```bash
+make env-check
+make runtime-check
+```
+
+What `make runtime-check` verifies:
+
+- `.venv/bin/python` exists
+- `.venv/bin/alpaca-pipelines` exists
+- `alpaca_pipelines` imports from the current checkout
+- the CLI shebang points into the same checkout
+- the required `ALPACA_*` variables allow CLI startup
+- `dataset-status --json` runs successfully
+
+If it fails, rebuild the runtime in place and re-run the preflight:
+
+```bash
+rm -rf .venv
+python3.11 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip setuptools wheel
+.venv/bin/python -m pip install -e ".[dev]"
+make runtime-check
+```
+
+On the HPC, `/projects/extern/...` may resolve to a canonical `/mnt/vast-kisski/...` path. That is acceptable as long as the venv and imported package still resolve to the same checkout.
+
+Do not launch `dataset-build`, `dataset-prepare-review`, `dataset-apply-review`, `standardizer-scan`, `standardizer-plan`, `standardizer-apply`, or `standardizer-index` until this preflight succeeds.
 
 ## Usage
 
