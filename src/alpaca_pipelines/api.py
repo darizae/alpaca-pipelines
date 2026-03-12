@@ -286,6 +286,19 @@ class PipelineAPI:
     def get_workflow_operation(self, job_id: str) -> dict[str, Any]:
         return self.workflow_ops.get(job_id).model_dump()
 
+    def fail_workflow_operation(
+        self,
+        *,
+        job_id: str,
+        error: str,
+        error_kind: str,
+    ) -> dict[str, Any]:
+        return self.workflow_ops.fail(
+            job_id,
+            error=error,
+            error_kind=error_kind,
+        ).model_dump()
+
     def get_standardizer_status(self) -> dict[str, Any]:
         return {
             "last_scan": self._dump_latest_operation("standardizer", "scan"),

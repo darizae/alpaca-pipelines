@@ -167,6 +167,7 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `dataset-apply-review`
 - `dataset-job`
 - `dataset-status`
+- `fail-operation`
 
 For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
 
@@ -242,6 +243,16 @@ print(f"Status: {status.status}")
 result = api.execute_run(run.run_id)
 print(f"Completed: {result.outputs.trained_model_path}")
 ```
+
+### Clearing a stale workflow job
+
+If a dataset-builder or standardizer operation is stuck in `pending` or `running` with no real worker behind it, mark it failed explicitly:
+
+```bash
+make clean-stale-workflow-job JOB_ID=<workflow-job-id>
+```
+
+This writes a terminal `failed` state into the operation record so status surfaces stop reporting it as active.
 
 #### Python API: selection tables export (batch)
 
