@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,9 @@ _OPERATION_STATE = "operation.json"
 _OPERATION_SPEC = "spec.json"
 _RUNNER_STDOUT = "stdout.log"
 _RUNNER_STDERR = "stderr.log"
+_WORKER_PID_METADATA_KEY = "worker_pid"
+_LAUNCH_MODE_METADATA_KEY = "launch_mode"
+_DETACHED_WORKER_LAUNCH_MODE = "detached_worker"
 
 
 def _now_iso() -> str:
@@ -96,16 +100,27 @@ class WorkflowOperationManager:
                 "spec": spec,
             },
         )
-        self._spawn_worker(paths)
+        worker_pid = self._spawn_worker(paths)
+        if worker_pid is not None:
+            operation = operation.model_copy(
+                update={
+                    "metadata": {
+                        **operation.metadata,
+                        _LAUNCH_MODE_METADATA_KEY: _DETACHED_WORKER_LAUNCH_MODE,
+                        _WORKER_PID_METADATA_KEY: worker_pid,
+                    }
+                }
+            )
+            write_json(paths.state_path, operation.model_dump())
         return operation
 
     def get(self, job_id: str) -> WorkflowOperation:
         state_path = self._find_state_path(job_id)
-        return WorkflowOperation.model_validate(read_json(state_path))
+        return self._load_operation(state_path)
 
     def fail(self, job_id: str, *, error: str, error_kind: str) -> WorkflowOperation:
         state_path = self._find_state_path(job_id)
-        operation = WorkflowOperation.model_validate(read_json(state_path))
+        operation = self._load_operation(state_path)
         if operation.status not in {"pending", "running"}:
             raise ValueError(
                 "Cannot fail workflow operation {}: status is {} "
@@ -124,7 +139,7 @@ class WorkflowOperationManager:
 
     def delete_failed(self, job_id: str) -> WorkflowOperation:
         state_path = self._find_state_path(job_id)
-        operation = WorkflowOperation.model_validate(read_json(state_path))
+        operation = self._load_operation(state_path)
         if operation.status != "failed":
             raise ValueError(
                 "Cannot delete workflow operation {}: status is {} " "(expected failed)".format(
@@ -155,7 +170,7 @@ class WorkflowOperationManager:
                 state_path = job_dir / _OPERATION_STATE
                 if not state_path.is_file():
                     continue
-                operations.append(WorkflowOperation.model_validate(read_json(state_path)))
+                operations.append(self._load_operation(state_path))
         operations.sort(key=lambda record: record.started_at, reverse=True)
         return operations
 
@@ -426,12 +441,12 @@ class WorkflowOperationManager:
             }
         raise ValueError(f"Unsupported dataset-builder operation: {operation.kind}")
 
-    def _spawn_worker(self, paths: OperationPaths) -> None:
+    def _spawn_worker(self, paths: OperationPaths) -> int | None:
         with (
             paths.stdout_path.open("ab") as stdout_handle,
             paths.stderr_path.open("ab") as stderr_handle,
         ):
-            subprocess.Popen(
+            process = subprocess.Popen(
                 [
                     sys.executable,
                     "-m",
@@ -444,6 +459,7 @@ class WorkflowOperationManager:
                 stdout=stdout_handle,
                 stderr=stderr_handle,
             )
+        return int(process.pid)
 
     def _find_state_path(self, job_id: str) -> Path:
         for workflow_root in self.root.iterdir() if self.root.is_dir() else []:
@@ -468,6 +484,89 @@ class WorkflowOperationManager:
         from alpaca_pipelines.collections.fs import _DEFAULT_FS
 
         return _DEFAULT_FS
+
+    def _load_operation(self, state_path: Path) -> WorkflowOperation:
+        operation = WorkflowOperation.model_validate(read_json(state_path))
+        return self._reconcile_active_operation(state_path, operation)
+
+    def _reconcile_active_operation(
+        self,
+        state_path: Path,
+        operation: WorkflowOperation,
+    ) -> WorkflowOperation:
+        if operation.status not in {"pending", "running"}:
+            return operation
+        launch_mode = operation.metadata.get(_LAUNCH_MODE_METADATA_KEY)
+        if launch_mode is None:
+            return self._mark_operation_failed(
+                state_path,
+                operation,
+                error="Workflow operation is missing detached worker launch metadata.",
+                error_kind="StaleOperation",
+            )
+        if launch_mode != _DETACHED_WORKER_LAUNCH_MODE:
+            return operation
+
+        worker_pid = self._parse_worker_pid(operation.metadata.get(_WORKER_PID_METADATA_KEY))
+        if worker_pid is None:
+            return self._mark_operation_failed(
+                state_path,
+                operation,
+                error="Detached workflow worker metadata is missing worker_pid.",
+                error_kind="StaleOperation",
+            )
+        if self._worker_process_is_active(worker_pid, Path(operation.job_dir)):
+            return operation
+        return self._mark_operation_failed(
+            state_path,
+            operation,
+            error="Detached workflow worker process {} is no longer running.".format(worker_pid),
+            error_kind="StaleOperation",
+        )
+
+    def _mark_operation_failed(
+        self,
+        state_path: Path,
+        operation: WorkflowOperation,
+        *,
+        error: str,
+        error_kind: str,
+    ) -> WorkflowOperation:
+        updated = operation.model_copy(
+            update={
+                "status": "failed",
+                "finished_at": _now_iso(),
+                "error": error,
+                "error_kind": error_kind,
+            }
+        )
+        write_json(state_path, updated.model_dump())
+        return updated
+
+    @staticmethod
+    def _parse_worker_pid(value: object) -> int | None:
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str) and value.isdigit():
+            return int(value)
+        return None
+
+    @staticmethod
+    def _worker_process_is_active(worker_pid: int, job_dir: Path) -> bool:
+        if worker_pid <= 0:
+            return False
+        proc_cmdline = Path("/proc") / str(worker_pid) / "cmdline"
+        if proc_cmdline.is_file():
+            try:
+                raw_cmdline = proc_cmdline.read_bytes().replace(b"\x00", b" ")
+            except OSError:
+                return False
+            return str(job_dir).encode("utf-8") in raw_cmdline
+        try:
+            os.kill(worker_pid, 0)
+        except OSError:
+            return False
+        return True
 
 
 def _plan_hash(plan_path: Path) -> str:

@@ -60,7 +60,7 @@ def test_spawn_worker_uses_cli_module_invocation(
         start_new_session: bool,
         stdout: object,
         stderr: object,
-    ) -> None:
+    ) -> SimpleNamespace:
         calls.append(
             {
                 "args": args,
@@ -69,11 +69,11 @@ def test_spawn_worker_uses_cli_module_invocation(
                 "stderr_name": getattr(stderr, "name", ""),
             }
         )
-        return None
+        return SimpleNamespace(pid=1234)
 
     monkeypatch.setattr("alpaca_pipelines.workflow_ops.subprocess.Popen", _fake_popen)
 
-    api.start_dataset_build(
+    operation = api.start_dataset_build(
         strategy_name="dataset-a",
         strategy_config={
             "split_strategy": "clipwise_balanced",
@@ -101,6 +101,8 @@ def test_spawn_worker_uses_cli_module_invocation(
     assert calls[0]["start_new_session"] is True
     assert str(calls[0]["stdout_name"]).endswith("stdout.log")
     assert str(calls[0]["stderr_name"]).endswith("stderr.log")
+    assert operation["metadata"]["launch_mode"] == "detached_worker"
+    assert operation["metadata"]["worker_pid"] == 1234
 
 
 def test_python_module_invocation_executes_operation_worker(tmp_path: Path) -> None:
@@ -441,3 +443,233 @@ def test_dataset_apply_review_operation_completes(
     assert persisted["status"] == "completed"
     assert persisted["result_summary"]["n_corrections"] == 3
     assert persisted["result_summary"]["n_target"] == 10
+
+
+def test_dataset_status_marks_dead_detached_job_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    job_dir = api.environment.runs_root / "operations" / "dataset_builder" / "build" / "job-1"
+    job_dir.mkdir(parents=True)
+    write_json(
+        job_dir / "operation.json",
+        {
+            "job_id": "job-1",
+            "workflow": "dataset_builder",
+            "kind": "build",
+            "status": "pending",
+            "created_at": "2026-03-13T00:00:00Z",
+            "started_at": "2026-03-13T00:00:00Z",
+            "finished_at": None,
+            "job_dir": str(job_dir),
+            "artifact_path": None,
+            "rollback_artifact_path": None,
+            "result_summary": None,
+            "error": None,
+            "error_kind": None,
+            "metadata": {
+                "strategy_name": "strategy-a",
+                "launch_mode": "detached_worker",
+                "worker_pid": 999999,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.WorkflowOperationManager._worker_process_is_active",
+        staticmethod(lambda worker_pid, job_dir: False),
+    )
+
+    payload = api.get_dataset_builder_status()
+
+    assert payload["active_jobs"] == []
+    operation = api.get_workflow_operation("job-1")
+    assert operation["status"] == "failed"
+    assert operation["error_kind"] == "StaleOperation"
+
+
+def test_standardizer_status_marks_pidless_detached_job_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    job_dir = api.environment.runs_root / "operations" / "standardizer" / "scan" / "job-1"
+    job_dir.mkdir(parents=True)
+    write_json(
+        job_dir / "operation.json",
+        {
+            "job_id": "job-1",
+            "workflow": "standardizer",
+            "kind": "scan",
+            "status": "running",
+            "created_at": "2026-03-13T00:00:00Z",
+            "started_at": "2026-03-13T00:00:00Z",
+            "finished_at": None,
+            "job_dir": str(job_dir),
+            "artifact_path": None,
+            "rollback_artifact_path": None,
+            "result_summary": None,
+            "error": None,
+            "error_kind": None,
+            "metadata": {
+                "launch_mode": "detached_worker",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.WorkflowOperationManager._worker_process_is_active",
+        staticmethod(lambda worker_pid, job_dir: True),
+    )
+
+    payload = api.get_standardizer_status()
+
+    assert payload["active_jobs"] == []
+    operation = api.get_workflow_operation("job-1")
+    assert operation["status"] == "failed"
+    assert operation["error"] == "Detached workflow worker metadata is missing worker_pid."
+
+
+def test_dataset_status_marks_legacy_active_job_failed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    job_dir = api.environment.runs_root / "operations" / "dataset_builder" / "build" / "job-1"
+    job_dir.mkdir(parents=True)
+    write_json(
+        job_dir / "operation.json",
+        {
+            "job_id": "job-1",
+            "workflow": "dataset_builder",
+            "kind": "build",
+            "status": "pending",
+            "created_at": "2026-03-13T00:00:00Z",
+            "started_at": "2026-03-13T00:00:00Z",
+            "finished_at": None,
+            "job_dir": str(job_dir),
+            "artifact_path": None,
+            "rollback_artifact_path": None,
+            "result_summary": None,
+            "error": None,
+            "error_kind": None,
+            "metadata": {
+                "strategy_name": "strategy-a",
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.WorkflowOperationManager._worker_process_is_active",
+        staticmethod(lambda worker_pid, job_dir: True),
+    )
+
+    payload = api.get_dataset_builder_status()
+
+    assert payload["active_jobs"] == []
+    operation = api.get_workflow_operation("job-1")
+    assert operation["status"] == "failed"
+    assert operation["error"] == "Workflow operation is missing detached worker launch metadata."
+
+
+def test_start_dataset_build_ignores_stale_dead_job_for_same_strategy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    _disable_spawn(monkeypatch)
+    stale_job_dir = (
+        api.environment.runs_root / "operations" / "dataset_builder" / "build" / "stale-job"
+    )
+    stale_job_dir.mkdir(parents=True)
+    write_json(
+        stale_job_dir / "operation.json",
+        {
+            "job_id": "stale-job",
+            "workflow": "dataset_builder",
+            "kind": "build",
+            "status": "pending",
+            "created_at": "2026-03-13T00:00:00Z",
+            "started_at": "2026-03-13T00:00:00Z",
+            "finished_at": None,
+            "job_dir": str(stale_job_dir),
+            "artifact_path": None,
+            "rollback_artifact_path": None,
+            "result_summary": None,
+            "error": None,
+            "error_kind": None,
+            "metadata": {
+                "strategy_name": "strategy-a",
+                "launch_mode": "detached_worker",
+                "worker_pid": 999999,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.WorkflowOperationManager._worker_process_is_active",
+        staticmethod(lambda worker_pid, job_dir: False),
+    )
+
+    operation = api.start_dataset_build(
+        strategy_name="strategy-a",
+        strategy_config={
+            "split_strategy": "clipwise_balanced",
+            "seed": 42,
+            "min_quality": 2,
+            "noise_per_positive": 1.0,
+            "noise_mining": {
+                "attempts_per_slot": 20,
+                "source_category_dirs": ["clips_labelled"],
+                "low_quality_as_negative": True,
+                "low_quality_threshold": 1,
+            },
+            "split_fractions": [0.7, 0.15, 0.15],
+            "duration_tolerance_s": 0.1,
+            "review_gap_s": 0.5,
+            "freq_low_hz": 0,
+            "freq_high_hz": 4000,
+        },
+    )
+
+    stale_operation = api.get_workflow_operation("stale-job")
+    assert stale_operation["status"] == "failed"
+    assert operation["job_id"] != "stale-job"
+
+
+def test_dataset_status_keeps_live_detached_job_active(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    job_dir = api.environment.runs_root / "operations" / "dataset_builder" / "build" / "job-1"
+    job_dir.mkdir(parents=True)
+    write_json(
+        job_dir / "operation.json",
+        {
+            "job_id": "job-1",
+            "workflow": "dataset_builder",
+            "kind": "build",
+            "status": "running",
+            "created_at": "2026-03-13T00:00:00Z",
+            "started_at": "2026-03-13T00:00:00Z",
+            "finished_at": None,
+            "job_dir": str(job_dir),
+            "artifact_path": None,
+            "rollback_artifact_path": None,
+            "result_summary": None,
+            "error": None,
+            "error_kind": None,
+            "metadata": {
+                "strategy_name": "strategy-a",
+                "launch_mode": "detached_worker",
+                "worker_pid": 1234,
+            },
+        },
+    )
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.WorkflowOperationManager._worker_process_is_active",
+        staticmethod(lambda worker_pid, job_dir: True),
+    )
+
+    payload = api.get_dataset_builder_status()
+
+    assert len(payload["active_jobs"]) == 1
+    assert payload["active_jobs"][0]["job_id"] == "job-1"
