@@ -611,3 +611,7 @@ def main() -> None:
         sys.exit(1)
 
     handler(args)
+
+
+if __name__ == "__main__":
+    main()
