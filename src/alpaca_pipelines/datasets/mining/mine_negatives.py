@@ -7,6 +7,7 @@ from pathlib import Path
 from alpaca_pipelines.datasets.audio_utils import extract_segment
 from alpaca_pipelines.datasets.contracts import SnippetEntry
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
+from alpaca_pipelines.datasets.recording_metadata import with_recording_window
 from alpaca_pipelines.datasets.source_discovery import SourceAudioFile
 
 
@@ -113,7 +114,7 @@ def _mine_single_slot(
                 fs.unlink(destination)
             continue
 
-        return SnippetEntry(
+        snippet = SnippetEntry(
             uid=uid,
             filename=filename,
             classification="noise",
@@ -127,6 +128,18 @@ def _mine_single_slot(
             recording_date=None,
             collection=source.collection,
             session_key=None,
+        )
+        source_recording_start_s = (
+            source.clip_start_s + start_s if source.clip_start_s is not None else None
+        )
+        source_recording_end_s = (
+            source.clip_start_s + end_s if source.clip_start_s is not None else None
+        )
+        return with_recording_window(
+            snippet,
+            source.source_recording,
+            start_offset_s=source_recording_start_s,
+            end_offset_s=source_recording_end_s,
         )
 
     return None

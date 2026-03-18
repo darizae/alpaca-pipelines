@@ -73,7 +73,7 @@ class LocalFS:
         return list(path.iterdir())
 
     def rglob_wavs(self, path: Path) -> list[Path]:
-        return sorted(p for p in path.rglob("*.wav") if p.is_file())
+        return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() == ".wav")
 
     def read_text(self, path: Path, encoding: str = "utf-8") -> str:
         return path.read_text(encoding=encoding)

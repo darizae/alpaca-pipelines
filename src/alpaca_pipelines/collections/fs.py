@@ -88,6 +88,10 @@ class FileSystem(Protocol):
         """
         ...
 
+    def open_write(self, path: Path) -> BinaryIO:
+        """Open file for binary writing, creating parent directories if needed."""
+        ...
+
     # ── Writing ──────────────────────────────────────────────────────────────
 
     def write_text(self, path: Path, content: str, encoding: str = "utf-8") -> None:
@@ -108,6 +112,10 @@ class FileSystem(Protocol):
         MUST NOT overwrite dst if it exists — raise ``FileExistsError`` if so.
         Caller guarantees dst.parent exists before calling this.
         """
+        ...
+
+    def unlink(self, path: Path) -> None:
+        """Delete file ``path``."""
         ...
 
 
@@ -136,13 +144,17 @@ class LocalFS:
         return list(path.iterdir())
 
     def rglob_wavs(self, path: Path) -> list[Path]:
-        return sorted(p for p in path.rglob("*.wav") if p.is_file())
+        return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() == ".wav")
 
     def read_text(self, path: Path, encoding: str = "utf-8") -> str:
         return path.read_text(encoding=encoding)
 
     def open_read(self, path: Path) -> BinaryIO:
         return open(path, "rb")
+
+    def open_write(self, path: Path) -> BinaryIO:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        return open(path, "wb")
 
     def write_text(self, path: Path, content: str, encoding: str = "utf-8") -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -155,6 +167,9 @@ class LocalFS:
         if dst.exists():
             raise FileExistsError(f"Target exists, refusing to overwrite: {dst}")
         src.rename(dst)
+
+    def unlink(self, path: Path) -> None:
+        path.unlink()
 
 
 # Module-level default — imported by workflows.py.

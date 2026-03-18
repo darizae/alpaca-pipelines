@@ -10,6 +10,7 @@ import pytest
 from alpaca_pipelines.api import PipelineAPI
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.io_utils import read_json, write_json
+from alpaca_pipelines.recordings import SourceRecording
 from alpaca_pipelines.workflow_ops import _plan_hash
 
 
@@ -209,6 +210,52 @@ def test_standardizer_scan_operation_completes(
     assert persisted["result_summary"]["total_hums"] == 3
 
 
+def test_standardizer_import_operation_completes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    _disable_spawn(monkeypatch)
+    identity_map_path = tmp_path / "identity_map.json"
+    write_json(
+        identity_map_path,
+        {
+            "canonical": {"401": {"display_name": "401"}},
+            "aliases": {"401": "401"},
+        },
+    )
+
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.import_raw_batches_from_identity_map_path",
+        lambda **kwargs: SimpleNamespace(
+            imported_batches=["401_m28_20250213"],
+            imported_collection_dirs=[
+                str(api.environment.collection_root / "audio_collection_401_m28_20250213")
+            ],
+            imported_recordings=[
+                SourceRecording(
+                    key="401_20250211_075558",
+                    collection="audio_collection_401_m28_20250213",
+                    subject_id="401",
+                    wav_path="audio_collection_401_m28_20250213/raw_recordings/20250211_075558.WAV",
+                )
+            ],
+            matched_csv_count=1,
+            missing_csv_count=0,
+        ),
+    )
+
+    operation = api.start_standardizer_import(str(identity_map_path))
+    api.execute_workflow_operation(operation["job_dir"])
+
+    persisted = read_json(Path(operation["job_dir"]) / "operation.json")
+    assert persisted["status"] == "completed"
+    assert persisted["result_summary"]["imported_batches"] == 1
+    assert persisted["result_summary"]["imported_recordings"] == 1
+    assert persisted["result_summary"]["matched_csv_count"] == 1
+    assert persisted["result_summary"]["batch_names"] == ["401_m28_20250213"]
+
+
 def test_standardizer_plan_operation_completes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -242,6 +289,58 @@ def test_standardizer_plan_operation_completes(
     assert persisted["status"] == "completed"
     assert persisted["result_summary"]["plan_id"] == operation["job_id"]
     assert Path(Path(operation["job_dir"]) / "plan.json").is_file()
+
+
+def test_standardizer_plan_operation_reports_skipped_non_ready_collections(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    _disable_spawn(monkeypatch)
+    ready_collection_dir = api.environment.collection_root / "audio_collection_ready"
+    raw_only_collection_dir = api.environment.collection_root / "audio_collection_raw_only"
+    ready_collection_dir.mkdir()
+    raw_only_collection_dir.mkdir()
+    identity_map_path = tmp_path / "identity_map.json"
+    write_json(
+        identity_map_path,
+        {
+            "canonical": {"alpha": {"display_name": "Alpha"}},
+            "aliases": {"alpha": "alpha"},
+        },
+    )
+
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.find_collection_dirs",
+        lambda root, fs: [ready_collection_dir, raw_only_collection_dir],
+    )
+
+    def _fake_plan_renames_for_collection(
+        **kwargs: object,
+    ) -> tuple[list[object], list[object], list[object]]:
+        collection_dir = kwargs["collection_dir"]
+        if collection_dir == raw_only_collection_dir:
+            raise FileNotFoundError("Missing clips/hums")
+        return [], [], []
+
+    monkeypatch.setattr(
+        "alpaca_pipelines.workflow_ops.plan_renames_for_collection",
+        _fake_plan_renames_for_collection,
+    )
+
+    operation = api.start_standardizer_plan(str(identity_map_path))
+    api.execute_workflow_operation(operation["job_dir"])
+
+    persisted = read_json(Path(operation["job_dir"]) / "operation.json")
+    assert persisted["status"] == "completed"
+    assert persisted["result_summary"]["collections"] == [
+        {
+            "name": "audio_collection_ready",
+            "clip_renames": [],
+            "dir_renames": [],
+        }
+    ]
+    assert persisted["result_summary"]["skipped_collections"] == ["audio_collection_raw_only"]
 
 
 def test_standardizer_apply_operation_completes(
@@ -527,6 +626,38 @@ def test_standardizer_status_marks_pidless_detached_job_failed(
     operation = api.get_workflow_operation("job-1")
     assert operation["status"] == "failed"
     assert operation["error"] == "Detached workflow worker metadata is missing worker_pid."
+
+
+def test_standardizer_status_returns_last_import(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    job_dir = api.environment.runs_root / "operations" / "standardizer" / "import" / "job-1"
+    job_dir.mkdir(parents=True)
+    write_json(
+        job_dir / "operation.json",
+        {
+            "job_id": "job-1",
+            "workflow": "standardizer",
+            "kind": "import",
+            "status": "completed",
+            "created_at": "2026-03-13T00:00:00Z",
+            "started_at": "2026-03-13T00:00:01Z",
+            "finished_at": "2026-03-13T00:00:02Z",
+            "job_dir": str(job_dir),
+            "artifact_path": None,
+            "rollback_artifact_path": None,
+            "result_summary": {"imported_batches": 1},
+            "error": None,
+            "error_kind": None,
+            "metadata": {},
+        },
+    )
+
+    payload = api.get_standardizer_status()
+
+    assert payload["last_import"]["job_id"] == "job-1"
+    assert payload["last_import"]["kind"] == "import"
 
 
 def test_dataset_status_marks_legacy_active_job_failed(

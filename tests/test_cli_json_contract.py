@@ -104,6 +104,46 @@ def test_fail_operation_json_writes_single_json_document(
     assert payload["error_kind"] == "StaleOperation"
 
 
+def test_standardizer_import_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    operation = WorkflowOperation(
+        job_id="22222222-1111-1111-1111-111111111111",
+        workflow="standardizer",
+        kind="import",
+        status="pending",
+        created_at="2026-03-12T01:00:00Z",
+        started_at="2026-03-12T01:00:01Z",
+        finished_at=None,
+        job_dir="/runs/operations/standardizer/import/22222222-1111-1111-1111-111111111111",
+        metadata={},
+    )
+    api = SimpleNamespace(
+        start_standardizer_import=lambda identity_map_path: operation.model_dump()
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "standardizer-import",
+            "--identity-map",
+            "/tmp/identity-map.json",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["kind"] == "import"
+    assert payload["workflow"] == "standardizer"
+
+
 def test_delete_failed_operation_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

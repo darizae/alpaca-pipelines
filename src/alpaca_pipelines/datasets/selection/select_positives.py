@@ -8,6 +8,8 @@ from alpaca_pipelines.datasets.contracts import SnippetEntry
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.index_reader import HumIndexEntry
 from alpaca_pipelines.datasets.paths import validate_relative_path
+from alpaca_pipelines.datasets.recording_metadata import with_recording_window
+from alpaca_pipelines.recordings import SourceRecording
 
 
 def _session_key(entry: HumIndexEntry) -> str:
@@ -21,6 +23,7 @@ def _snippet_filename(classification: str, label: str, uid: int, collection: str
 
 def select_positives(
     entries: list[HumIndexEntry],
+    recordings_by_key: dict[str, SourceRecording],
     min_quality: int,
     collection_root: Path,
     snippets_dir: Path,
@@ -55,22 +58,30 @@ def select_positives(
         destination = snippets_dir / filename
         _copy_wav(hum_wav_path, destination, fs)
 
+        snippet = SnippetEntry(
+            uid=uid,
+            filename=filename,
+            classification="target",
+            source_type="hum",
+            source_path=entry.hum_path,
+            start_s=0.0,
+            end_s=actual_duration,
+            duration_s=actual_duration,
+            quality=entry.source_quality,
+            subject_id=entry.subject_id,
+            recording_date=entry.recording_date,
+            recording_time=entry.recording_time,
+            collection=entry.collection,
+            session_key=_session_key(entry),
+        )
         selected.append(
-            SnippetEntry(
-                uid=uid,
-                filename=filename,
-                classification="target",
-                source_type="hum",
-                source_path=entry.hum_path,
-                start_s=0.0,
-                end_s=actual_duration,
-                duration_s=actual_duration,
-                quality=entry.source_quality,
-                subject_id=entry.subject_id,
-                recording_date=entry.recording_date,
-                recording_time=entry.recording_time,
-                collection=entry.collection,
-                session_key=_session_key(entry),
+            with_recording_window(
+                snippet,
+                recordings_by_key.get(entry.source_recording_key)
+                if entry.source_recording_key
+                else None,
+                start_offset_s=entry.hum_start_s,
+                end_offset_s=entry.hum_end_s,
             )
         )
 
@@ -79,6 +90,7 @@ def select_positives(
 
 def select_low_quality_as_negatives(
     entries: list[HumIndexEntry],
+    recordings_by_key: dict[str, SourceRecording],
     low_quality_threshold: int,
     collection_root: Path,
     snippets_dir: Path,
@@ -112,22 +124,30 @@ def select_low_quality_as_negatives(
         destination = snippets_dir / filename
         _copy_wav(hum_wav_path, destination, fs)
 
+        snippet = SnippetEntry(
+            uid=uid,
+            filename=filename,
+            classification="noise",
+            source_type="low_quality_hum",
+            source_path=entry.hum_path,
+            start_s=0.0,
+            end_s=actual_duration,
+            duration_s=actual_duration,
+            quality=entry.source_quality,
+            subject_id=entry.subject_id,
+            recording_date=entry.recording_date,
+            recording_time=entry.recording_time,
+            collection=entry.collection,
+            session_key=_session_key(entry),
+        )
         selected.append(
-            SnippetEntry(
-                uid=uid,
-                filename=filename,
-                classification="noise",
-                source_type="low_quality_hum",
-                source_path=entry.hum_path,
-                start_s=0.0,
-                end_s=actual_duration,
-                duration_s=actual_duration,
-                quality=entry.source_quality,
-                subject_id=entry.subject_id,
-                recording_date=entry.recording_date,
-                recording_time=entry.recording_time,
-                collection=entry.collection,
-                session_key=_session_key(entry),
+            with_recording_window(
+                snippet,
+                recordings_by_key.get(entry.source_recording_key)
+                if entry.source_recording_key
+                else None,
+                start_offset_s=entry.hum_start_s,
+                end_offset_s=entry.hum_end_s,
             )
         )
 

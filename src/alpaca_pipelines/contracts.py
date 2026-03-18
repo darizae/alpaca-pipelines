@@ -11,6 +11,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from alpaca_pipelines.recordings import SourceRecording
+
 # ---------------------------------------------------------------------------
 # Persistence layer contracts (read-only inputs)
 # ---------------------------------------------------------------------------
@@ -22,6 +24,8 @@ class IndexMeta(BaseModel):
     generated_at: str | None = None
     n_collections: int
     n_total_hums: int
+    n_recordings: int = 0
+    n_recordings_with_sidecar: int = 0
 
 
 class IndexEntry(BaseModel):
@@ -37,6 +41,7 @@ class IndexEntry(BaseModel):
     source_quality: int
     keep: bool
     hum_uid: int
+    source_recording_key: str | None = None
 
 
 class MergedIndex(BaseModel):
@@ -44,6 +49,7 @@ class MergedIndex(BaseModel):
 
     meta: IndexMeta
     entries: list[IndexEntry]
+    recordings: list[SourceRecording] = Field(default_factory=list)
 
 
 Classification = Literal["target", "noise"]
@@ -69,6 +75,14 @@ class ManifestSnippet(BaseModel):
     collection: str
     session_key: str | None
     recording_time: str | None = None
+    source_recording_key: str | None = None
+    source_recording_start_s: float | None = None
+    source_recording_end_s: float | None = None
+    snippet_started_at: str | None = None
+    snippet_ended_at: str | None = None
+    snippet_midpoint_latitude: float | None = None
+    snippet_midpoint_longitude: float | None = None
+    snippet_gps_status: str | None = None
     split: SplitName | None = None
     review_status: ReviewStatus = "pending"
 
@@ -84,6 +98,8 @@ class ManifestMeta(BaseModel):
     n_snippets: int
     n_target: int
     n_noise: int
+    n_recordings: int = 0
+    n_recordings_with_sidecar: int = 0
     manifest_hash: str = ""
     strategy_config: dict[str, Any] | None = None
 
@@ -93,6 +109,7 @@ class DatasetManifest(BaseModel):
 
     meta: ManifestMeta
     snippets: list[ManifestSnippet]
+    recordings: list[SourceRecording] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +120,7 @@ RunType = Literal["training", "prediction", "evaluation", "rf_training"]
 RunStatus = Literal["created", "submitted", "running", "completed", "failed", "cancelled"]
 WorkflowName = Literal["standardizer", "dataset_builder"]
 WorkflowOperationKind = Literal[
+    "import",
     "scan",
     "plan",
     "apply",

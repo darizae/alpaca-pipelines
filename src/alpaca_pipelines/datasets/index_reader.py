@@ -6,6 +6,7 @@ from typing import Any
 
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.io_utils import read_json
+from alpaca_pipelines.recordings import SourceRecording
 
 
 @dataclass(frozen=True)
@@ -20,12 +21,14 @@ class HumIndexEntry:
     source_quality: int
     keep: bool
     hum_uid: int
+    source_recording_key: str | None
 
 
 @dataclass(frozen=True)
 class IndexPayload:
     entries: list[HumIndexEntry]
     n_collections: int
+    recordings: list[SourceRecording]
 
 
 def _parse_entry(raw: dict[str, Any]) -> HumIndexEntry:
@@ -40,6 +43,9 @@ def _parse_entry(raw: dict[str, Any]) -> HumIndexEntry:
         source_quality=int(raw["source_quality"]),
         keep=bool(raw["keep"]),
         hum_uid=int(raw["hum_uid"]),
+        source_recording_key=(
+            str(raw["source_recording_key"]) if raw.get("source_recording_key") else None
+        ),
     )
 
 
@@ -55,5 +61,9 @@ def load_merged_index(path: Path, fs: FileSystem = _DEFAULT_FS) -> IndexPayload:
 
     entries = [_parse_entry(e) for e in raw_entries]
     n_collections = int(meta.get("n_collections", 0))
+    raw_recordings = data.get("recordings", [])
+    if not isinstance(raw_recordings, list):
+        raise ValueError(f"Expected 'recordings' to be a list: {path}")
+    recordings = [SourceRecording.model_validate(item) for item in raw_recordings]
 
-    return IndexPayload(entries=entries, n_collections=n_collections)
+    return IndexPayload(entries=entries, n_collections=n_collections, recordings=recordings)

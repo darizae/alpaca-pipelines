@@ -17,6 +17,7 @@ from alpaca_pipelines.collections.indexing.build_index import build_collection_i
 from alpaca_pipelines.collections.io_utils import read_json, write_json
 from alpaca_pipelines.collections.paths import CategoryNames, find_collection_dirs
 from alpaca_pipelines.collections.planning.rename_plan import RenameOp, plan_renames_for_collection
+from alpaca_pipelines.collections.raw_import import RawImportResult, import_raw_batches
 from alpaca_pipelines.collections.scanning import scan_collection
 
 
@@ -39,6 +40,7 @@ class BuildIndexReport:
     out_dir: Path
     per_collection_payloads: dict[str, dict[str, Any]]
     merged_payload: dict[str, Any]
+    skipped_collections: list[str]
 
 
 def scan_root(
@@ -51,16 +53,40 @@ def scan_root(
 
     payload: dict[str, Any] = {"root": str(root), "collections": []}
     for collection_dir in collections:
-        scan_result = scan_collection(collection_dir, resolved_category_names, fs)
-        payload["collections"].append(
-            {
-                "collection": scan_result.collection_name,
-                "clips_dir": str(scan_result.clips_dir),
-                "hums_dir": str(scan_result.hums_dir),
-                "n_clips": len(scan_result.clip_files),
-                "n_hums": len(scan_result.hum_files),
-            }
-        )
+        try:
+            scan_result = scan_collection(collection_dir, resolved_category_names, fs)
+            payload["collections"].append(
+                {
+                    "collection": scan_result.collection_name,
+                    "clips_dir": str(scan_result.clips_dir),
+                    "hums_dir": str(scan_result.hums_dir),
+                    "raw_recordings_dir": str(collection_dir / "raw_recordings"),
+                    "n_clips": len(scan_result.clip_files),
+                    "n_hums": len(scan_result.hum_files),
+                    "n_raw_recordings": len(fs.rglob_wavs(collection_dir / "raw_recordings"))
+                    if fs.exists(collection_dir / "raw_recordings")
+                    else 0,
+                    "status": "ready",
+                    "is_ready": True,
+                }
+            )
+        except FileNotFoundError:
+            raw_recordings_dir = collection_dir / "raw_recordings"
+            payload["collections"].append(
+                {
+                    "collection": collection_dir.name,
+                    "clips_dir": str(collection_dir / resolved_category_names.clips_labelled),
+                    "hums_dir": str(collection_dir / resolved_category_names.hums_segmented),
+                    "raw_recordings_dir": str(raw_recordings_dir),
+                    "n_clips": 0,
+                    "n_hums": 0,
+                    "n_raw_recordings": len(fs.rglob_wavs(raw_recordings_dir))
+                    if fs.exists(raw_recordings_dir)
+                    else 0,
+                    "status": "raw_only",
+                    "is_ready": False,
+                }
+            )
 
     return ScanReport(root=root, payload=payload)
 
@@ -87,9 +113,12 @@ def plan_rename_root(
     hum_audit_rows: list[dict[str, Any]] = []
 
     for collection_dir in collections:
-        collection_ops, clip_audit, hum_audit = plan_renames_for_collection(
-            collection_dir, identity_map, resolved_category_names, fs
-        )
+        try:
+            collection_ops, clip_audit, hum_audit = plan_renames_for_collection(
+                collection_dir, identity_map, resolved_category_names, fs
+            )
+        except FileNotFoundError:
+            continue
         ops.extend(collection_ops)
         clip_audit_rows.extend([row.__dict__ for row in clip_audit])
         hum_audit_rows.extend([row.__dict__ for row in hum_audit])
@@ -294,9 +323,14 @@ def build_indexes(
 
     per_collection_payloads: dict[str, dict[str, Any]] = {}
     indexes: list[dict[str, Any]] = []
+    skipped_collections: list[str] = []
 
     for collection_dir in collections:
-        scan_result = scan_collection(collection_dir, resolved_category_names, fs)
+        try:
+            scan_result = scan_collection(collection_dir, resolved_category_names, fs)
+        except FileNotFoundError:
+            skipped_collections.append(collection_dir.name)
+            continue
         if scan_result.hums_dir.name != resolved_category_names.hums_segmented:
             raise ValueError(
                 f"{collection_dir.name}: hums dir not standardized "
@@ -326,6 +360,7 @@ def build_indexes(
         out_dir=out_dir,
         per_collection_payloads=per_collection_payloads,
         merged_payload=merged_payload,
+        skipped_collections=skipped_collections,
     )
 
 
@@ -346,6 +381,15 @@ def build_indexes_from_identity_map_path(
         category_names=category_names,
         fs=fs,
     )
+
+
+def import_raw_batches_from_identity_map_path(
+    root: Path,
+    identity_map_path: Path,
+    fs: FileSystem = _DEFAULT_FS,
+) -> RawImportResult:
+    identity_map = load_identity_map(identity_map_path)
+    return import_raw_batches(root, identity_map, fs)
 
 
 def _detect_plan_collisions(ops: list[RenameOp]) -> None:
