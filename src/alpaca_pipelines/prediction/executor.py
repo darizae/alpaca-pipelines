@@ -7,6 +7,7 @@ and batch inference on dataset test splits.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,7 @@ from bioacoustics_dl_toolbox.training.checkpoints import load_model
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.io_utils import write_json
+from alpaca_pipelines.prediction.audio_sources import resolve_collection_audio_files
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 
@@ -55,6 +57,12 @@ def _validate_class_to_index(class_to_index: dict[str, int]) -> None:
                 sorted(class_to_index.keys())
             )
         )
+
+
+def _prediction_output_path(predictions_dir: Path, audio_file: str) -> Path:
+    stem = Path(audio_file).stem
+    digest = hashlib.sha1(audio_file.encode("utf-8")).hexdigest()[:10]
+    return predictions_dir / f"{stem}_{digest}.json"
 
 
 def _load_trained_model(
@@ -240,6 +248,12 @@ def execute_prediction(
             dataset_handle = load_dataset_handle(dataset_dir, environment.collection_root)
             for filename in dataset_handle.splits.test:
                 audio_files.append(str(dataset_handle.snippets_dir / filename))
+        elif spec.mode == "collection":
+            audio_files = resolve_collection_audio_files(
+                collection_root=environment.collection_root,
+                collection_names=spec.collection_names,
+                source_category_dirs=spec.source_category_dirs,
+            )
 
         if not audio_files:
             raise ValueError("No audio files to predict")
@@ -283,7 +297,7 @@ def execute_prediction(
             }
             all_results.append(file_result)
 
-            per_file_path = predictions_dir / "{}.json".format(Path(audio_file).stem)
+            per_file_path = _prediction_output_path(predictions_dir, audio_file)
             if per_file_path.exists():
                 raise FileExistsError(
                     "Prediction output path already exists (filename collision): {}".format(

@@ -9,11 +9,18 @@ from alpaca_pipelines.datasets.contracts import Manifest, ManifestMeta, SnippetE
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.io_utils import read_json, write_json
 from alpaca_pipelines.datasets.paths import MANIFEST_FILENAME
+from alpaca_pipelines.recordings import SourceRecording, compute_recording_counts
 
 
-def _compute_entries_hash(snippets: list[SnippetEntry]) -> str:
+def _compute_entries_hash(
+    snippets: list[SnippetEntry],
+    recordings: list[SourceRecording],
+) -> str:
     serialized = json.dumps(
-        [s.model_dump() for s in snippets],
+        {
+            "snippets": [s.model_dump() for s in snippets],
+            "recordings": [recording.model_dump() for recording in recordings],
+        },
         sort_keys=True,
         ensure_ascii=False,
     )
@@ -26,12 +33,14 @@ def build_manifest(
     merged_index_path: Path,
     seed: int,
     snippets: list[SnippetEntry],
+    recordings: list[SourceRecording],
     strategy_config: dict[str, object] | None = None,
 ) -> Manifest:
     n_target = sum(1 for s in snippets if s.classification == "target")
     n_noise = sum(1 for s in snippets if s.classification == "noise")
 
-    entries_hash = _compute_entries_hash(snippets)
+    entries_hash = _compute_entries_hash(snippets, recordings)
+    n_recordings, n_recordings_with_sidecar = compute_recording_counts(recordings)
 
     meta = ManifestMeta(
         strategy_name=strategy_name,
@@ -42,11 +51,13 @@ def build_manifest(
         n_snippets=len(snippets),
         n_target=n_target,
         n_noise=n_noise,
+        n_recordings=n_recordings,
+        n_recordings_with_sidecar=n_recordings_with_sidecar,
         manifest_hash=entries_hash,
         strategy_config=strategy_config,
     )
 
-    return Manifest(meta=meta, snippets=snippets)
+    return Manifest(meta=meta, snippets=snippets, recordings=recordings)
 
 
 def write_manifest(

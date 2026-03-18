@@ -282,6 +282,16 @@ def _cmd_standardizer_scan(args: argparse.Namespace) -> None:
     _emit_json(payload)
 
 
+def _cmd_standardizer_import(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.start_standardizer_import(args.identity_map)
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)
+    _emit_json(payload)
+
+
 def _cmd_standardizer_plan(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
@@ -509,6 +519,10 @@ def _build_parser() -> argparse.ArgumentParser:
     standardizer_scan_parser = subparsers.add_parser("standardizer-scan")
     standardizer_scan_parser.add_argument("--json", action="store_true")
 
+    standardizer_import_parser = subparsers.add_parser("standardizer-import")
+    standardizer_import_parser.add_argument("--identity-map", required=True)
+    standardizer_import_parser.add_argument("--json", action="store_true")
+
     standardizer_plan_parser = subparsers.add_parser("standardizer-plan")
     standardizer_plan_parser.add_argument("--identity-map", required=True)
     standardizer_plan_parser.add_argument("--json", action="store_true")
@@ -590,6 +604,7 @@ def main() -> None:
         "export-selection-tables": _cmd_export_selection_tables,
         "migrate-backend-meta": _cmd_migrate_backend_meta,
         "standardizer-scan": _cmd_standardizer_scan,
+        "standardizer-import": _cmd_standardizer_import,
         "standardizer-plan": _cmd_standardizer_plan,
         "standardizer-apply": _cmd_standardizer_apply,
         "standardizer-index": _cmd_standardizer_index,

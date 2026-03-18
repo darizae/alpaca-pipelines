@@ -15,9 +15,14 @@ class IdentityMap(BaseModel):
     aliases: dict[str, str]
 
     def normalize_subject(self, token: str) -> str:
+        if token in self.canonical:
+            return token
         if token in self.aliases:
             return self.aliases[token]
         lowered = token.lower()
+        canonical_lowered = {key.lower(): key for key in self.canonical}
+        if lowered in canonical_lowered:
+            return canonical_lowered[lowered]
         if lowered in self.aliases:
             return self.aliases[lowered]
         raise ValueError(f"Unknown subject token '{token}'. Add it to identity map aliases.")

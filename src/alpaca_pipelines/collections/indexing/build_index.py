@@ -10,6 +10,12 @@ from alpaca_pipelines.collections.contracts import IdentityMap
 from alpaca_pipelines.collections.fs import FileSystem
 from alpaca_pipelines.collections.parsing.parse import parse_canonical_hum_filename
 from alpaca_pipelines.collections.parsing.patterns import CANONICAL_CLIP_RE
+from alpaca_pipelines.recordings import (
+    SourceRecording,
+    compute_recording_counts,
+    derive_source_recording_key,
+    load_collection_recordings,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +30,7 @@ class IndexEntry:
     source_quality: int
     keep: bool
     hum_uid: int
+    source_recording_key: str | None
 
 
 def build_collection_index(
@@ -48,6 +55,8 @@ def build_collection_index(
         )
 
     hum_files = fs.rglob_wavs(hums_dir)
+    collection_recordings = load_collection_recordings(collection_dir, fs)
+    recordings_by_key = {recording.key: recording for recording in collection_recordings}
 
     entries: list[IndexEntry] = []
     hum_uid = 1
@@ -71,6 +80,15 @@ def build_collection_index(
         recording_time = (
             f"{time_hhmmss[0:2]}:{time_hhmmss[2:4]}:{time_hhmmss[4:6]}" if time_hhmmss else None
         )
+        source_recording_key = None
+        if recording_time is not None:
+            candidate_key = derive_source_recording_key(
+                subject_id=subject_id,
+                recording_date=recording_date,
+                recording_time=recording_time,
+            )
+            if candidate_key in recordings_by_key:
+                source_recording_key = candidate_key
 
         keep = True
         if config.min_source_quality_to_keep is not None:
@@ -91,29 +109,50 @@ def build_collection_index(
                 source_quality=parsed.source_quality,
                 keep=keep,
                 hum_uid=hum_uid,
+                source_recording_key=source_recording_key,
             )
         )
         hum_uid += 1
 
+    n_recordings, n_recordings_with_sidecar = compute_recording_counts(collection_recordings)
     meta: dict[str, Any] = {
         "collection": collection_dir.name,
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "n_hums": len(entries),
+        "n_recordings": n_recordings,
+        "n_recordings_with_sidecar": n_recordings_with_sidecar,
         "min_source_quality_to_keep": config.min_source_quality_to_keep,
         "persistence_root_contract": "hum_path is relative to ALPACA_COLLECTION_ROOT",
     }
 
-    return {"meta": meta, "entries": [e.__dict__ for e in entries]}
+    return {
+        "meta": meta,
+        "entries": [e.__dict__ for e in entries],
+        "recordings": [recording.model_dump() for recording in collection_recordings],
+    }
 
 
 def merge_indexes(indexes: list[dict[str, Any]]) -> dict[str, Any]:
     merged_entries: list[dict[str, Any]] = []
+    merged_recordings: dict[str, SourceRecording] = {}
     for index in indexes:
         merged_entries.extend(index["entries"])
+        for raw_recording in index.get("recordings", []):
+            recording = SourceRecording.model_validate(raw_recording)
+            merged_recordings[recording.key] = recording
 
+    n_recordings, n_recordings_with_sidecar = compute_recording_counts(
+        list(merged_recordings.values())
+    )
     meta: dict[str, Any] = {
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "n_collections": len(indexes),
         "n_total_hums": len(merged_entries),
+        "n_recordings": n_recordings,
+        "n_recordings_with_sidecar": n_recordings_with_sidecar,
     }
-    return {"meta": meta, "entries": merged_entries}
+    return {
+        "meta": meta,
+        "entries": merged_entries,
+        "recordings": [recording.model_dump() for recording in merged_recordings.values()],
+    }

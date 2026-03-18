@@ -76,6 +76,7 @@ def build_dataset(
 ) -> BuildResult:
     if index_payload is None:
         index_payload = load_merged_index(merged_index_path, fs)
+    recordings_by_key = {recording.key: recording for recording in index_payload.recordings}
 
     sorted_entries = sorted(
         index_payload.entries,
@@ -95,6 +96,7 @@ def build_dataset(
 
     positive_snippets = select_positives(
         entries=sorted_entries,
+        recordings_by_key=recordings_by_key,
         min_quality=strategy_config.min_quality,
         collection_root=collection_root,
         snippets_dir=snippets_dir,
@@ -107,6 +109,7 @@ def build_dataset(
     if strategy_config.noise_mining.low_quality_as_negative:
         low_quality_negatives = select_low_quality_as_negatives(
             entries=sorted_entries,
+            recordings_by_key=recordings_by_key,
             low_quality_threshold=strategy_config.noise_mining.low_quality_threshold,
             collection_root=collection_root,
             snippets_dir=snippets_dir,
@@ -146,6 +149,11 @@ def build_dataset(
         for snippet in split_snippets:
             annotated_snippets.append(snippet.model_copy(update={"split": split_name}))
 
+    manifest_recordings = _select_manifest_recordings(
+        annotated_snippets,
+        recordings_by_key,
+    )
+
     _write_split_csvs(dataset_dir, split_result, fs)
 
     manifest = build_manifest(
@@ -154,6 +162,7 @@ def build_dataset(
         merged_index_path=merged_index_path,
         seed=strategy_config.seed,
         snippets=annotated_snippets,
+        recordings=manifest_recordings,
         strategy_config=strategy_config.model_dump(),
     )
     write_manifest(manifest, dataset_dir, fs)
@@ -273,7 +282,7 @@ def _regenerate_split_csvs(dataset_dir: Path, manifest: Manifest, fs: FileSystem
 
 
 def _recompute_manifest_hash(manifest: Manifest) -> Manifest:
-    new_hash = _compute_entries_hash(manifest.snippets)
+    new_hash = _compute_entries_hash(manifest.snippets, manifest.recordings)
     return manifest.model_copy(
         update={
             "meta": manifest.meta.model_copy(update={"manifest_hash": new_hash}),
@@ -294,3 +303,13 @@ def _read_review_config_from_manifest(manifest: Manifest) -> dict[str, Any]:
         "freq_low_hz": 0,
         "freq_high_hz": 4000,
     }
+
+
+def _select_manifest_recordings(
+    snippets: list[SnippetEntry],
+    recordings_by_key: dict[str, Any],
+) -> list[Any]:
+    selected_keys = {
+        snippet.source_recording_key for snippet in snippets if snippet.source_recording_key
+    }
+    return [recordings_by_key[key] for key in sorted(selected_keys) if key in recordings_by_key]

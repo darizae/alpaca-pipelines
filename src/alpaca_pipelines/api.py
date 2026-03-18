@@ -61,6 +61,13 @@ class PipelineAPI:
         """Create a new prediction run from a specification."""
         if spec.mode == "dataset" and spec.dataset_name is not None:
             self.environment.resolve_dataset_dir(spec.dataset_name)
+        if spec.mode == "collection":
+            for collection_name in spec.collection_names:
+                collection_dir = self.environment.collection_root / collection_name
+                if not collection_dir.is_dir():
+                    raise FileNotFoundError(
+                        "Collection directory not found: {}".format(collection_dir)
+                    )
         if not Path(spec.model_path).is_file():
             raise FileNotFoundError("Model file not found: {}".format(spec.model_path))
         return self.run_manager.create_run(
@@ -237,6 +244,15 @@ class PipelineAPI:
         )
         return record.model_dump()
 
+    def start_standardizer_import(self, identity_map_path: str) -> dict[str, Any]:
+        self.workflow_ops.ensure_no_active("standardizer", "import")
+        record = self.workflow_ops.start(
+            workflow="standardizer",
+            kind="import",
+            spec={"identity_map_path": identity_map_path},
+        )
+        return record.model_dump()
+
     def start_standardizer_plan(self, identity_map_path: str) -> dict[str, Any]:
         self.workflow_ops.ensure_no_active("standardizer", "plan")
         record = self.workflow_ops.start(
@@ -312,6 +328,7 @@ class PipelineAPI:
 
     def get_standardizer_status(self) -> dict[str, Any]:
         return {
+            "last_import": self._dump_latest_operation("standardizer", "import"),
             "last_scan": self._dump_latest_operation("standardizer", "scan"),
             "last_plan": self._dump_latest_operation("standardizer", "plan"),
             "last_apply": self._dump_latest_operation("standardizer", "apply"),

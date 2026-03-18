@@ -9,7 +9,7 @@ class NoiseMiningConfig(BaseModel):
         description="Maximum attempts before giving up on a single noise slot.",
     )
     source_category_dirs: list[str] = Field(
-        default_factory=lambda: ["clips_labelled"],
+        default_factory=lambda: ["clips_labelled", "raw_recordings"],
         description="Category directory names to scan for source audio files.",
     )
     low_quality_as_negative: bool = Field(

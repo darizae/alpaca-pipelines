@@ -19,6 +19,7 @@ from alpaca_pipelines.collections.planning.rename_plan import plan_renames_for_c
 from alpaca_pipelines.collections.workflows import (
     apply_rename_plan_file,
     build_indexes_from_identity_map_path,
+    import_raw_batches_from_identity_map_path,
     scan_root,
     write_scan_report,
 )
@@ -244,6 +245,25 @@ class WorkflowOperationManager:
     ) -> dict[str, Any]:
         collection_root = self.environment.collection_root
         fs = self._default_fs()
+        if operation.kind == "import":
+            identity_map_path = Path(str(spec["identity_map_path"]))
+            import_result = import_raw_batches_from_identity_map_path(
+                root=collection_root,
+                identity_map_path=identity_map_path,
+                fs=fs,
+            )
+            return {
+                "imported_batches": len(import_result.imported_batches),
+                "imported_recordings": len(import_result.imported_recordings),
+                "matched_csv_count": import_result.matched_csv_count,
+                "missing_csv_count": import_result.missing_csv_count,
+                "collection_paths": import_result.imported_collection_dirs,
+                "batch_names": import_result.imported_batches,
+                "recording_preview": [
+                    recording.model_dump(exclude={"track_points"})
+                    for recording in import_result.imported_recordings[:20]
+                ],
+            }
         if operation.kind == "scan":
             report = scan_root(collection_root)
             artifact_path = Path(operation.artifact_path or job_dir / "scan_report.json")
@@ -253,8 +273,11 @@ class WorkflowOperationManager:
                     "name": str(item["collection"]),
                     "clips_dir": str(item["clips_dir"]),
                     "hums_dir": str(item["hums_dir"]),
+                    "raw_recordings_dir": str(item.get("raw_recordings_dir", "")),
                     "clip_count": int(item["n_clips"]),
                     "hum_count": int(item["n_hums"]),
+                    "raw_recording_count": int(item.get("n_raw_recordings", 0)),
+                    "status": str(item.get("status", "ready")),
                     "errors": [],
                 }
                 for item in report.payload["collections"]
@@ -263,6 +286,15 @@ class WorkflowOperationManager:
                 "collections": len(collections_detail),
                 "total_clips": sum(item["clip_count"] for item in collections_detail),
                 "total_hums": sum(item["hum_count"] for item in collections_detail),
+                "total_raw_recordings": sum(
+                    item["raw_recording_count"] for item in collections_detail
+                ),
+                "ready_collections": sum(
+                    1 for item in collections_detail if item["status"] == "ready"
+                ),
+                "raw_only_collections": sum(
+                    1 for item in collections_detail if item["status"] == "raw_only"
+                ),
                 "has_errors": False,
                 "collections_detail": collections_detail,
             }
@@ -270,18 +302,23 @@ class WorkflowOperationManager:
             identity_map_path = Path(str(spec["identity_map_path"]))
             identity_map = load_identity_map(identity_map_path)
             collections: list[dict[str, Any]] = []
+            skipped_collections: list[str] = []
             total_file_renames = 0
             total_dir_renames = 0
             aggregated_ops: list[dict[str, str]] = []
             aggregated_clip_audit: list[dict[str, Any]] = []
             aggregated_hum_audit: list[dict[str, Any]] = []
             for collection_dir in find_collection_dirs(collection_root, fs):
-                collection_ops, clip_audit, hum_audit = plan_renames_for_collection(
-                    collection_dir=collection_dir,
-                    identity_map=identity_map,
-                    category_names=CategoryNames(),
-                    fs=fs,
-                )
+                try:
+                    collection_ops, clip_audit, hum_audit = plan_renames_for_collection(
+                        collection_dir=collection_dir,
+                        identity_map=identity_map,
+                        category_names=CategoryNames(),
+                        fs=fs,
+                    )
+                except FileNotFoundError:
+                    skipped_collections.append(collection_dir.name)
+                    continue
                 aggregated_ops.extend([{"src": op.src, "dst": op.dst} for op in collection_ops])
                 aggregated_clip_audit.extend([row.__dict__ for row in clip_audit])
                 aggregated_hum_audit.extend([row.__dict__ for row in hum_audit])
@@ -330,6 +367,7 @@ class WorkflowOperationManager:
                 "has_collisions": False,
                 "artifact_hpc_path": str(artifact_path),
                 "collections": collections,
+                "skipped_collections": skipped_collections,
             }
         if operation.kind == "apply":
             plan_job_id = str(spec["plan_job_id"])
@@ -381,9 +419,22 @@ class WorkflowOperationManager:
                 "total_hums": kept + excluded,
                 "kept": kept,
                 "excluded": excluded,
+                "skipped_collections": list(getattr(index_report, "skipped_collections", [])),
                 "min_source_quality_to_keep": min_quality,
                 "generated_at": index_report.merged_payload.get("meta", {}).get(
                     "generated_at", _now_iso()
+                ),
+                "n_recordings": int(
+                    index_report.merged_payload.get("meta", {}).get(
+                        "n_recordings",
+                        0,
+                    )
+                ),
+                "n_recordings_with_sidecar": int(
+                    index_report.merged_payload.get("meta", {}).get(
+                        "n_recordings_with_sidecar",
+                        0,
+                    )
                 ),
                 "merged_index_hpc_path": str(merged_index_path),
                 "per_collection_paths": [
