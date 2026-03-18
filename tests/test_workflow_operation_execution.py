@@ -279,7 +279,7 @@ def test_standardizer_plan_operation_completes(
     )
     monkeypatch.setattr(
         "alpaca_pipelines.workflow_ops.plan_renames_for_collection",
-        lambda **kwargs: ([], [], []),
+        lambda **kwargs: ([], [], [], [], []),
     )
 
     operation = api.start_standardizer_plan(str(identity_map_path))
@@ -291,7 +291,7 @@ def test_standardizer_plan_operation_completes(
     assert Path(Path(operation["job_dir"]) / "plan.json").is_file()
 
 
-def test_standardizer_plan_operation_reports_skipped_non_ready_collections(
+def test_standardizer_plan_operation_includes_non_ready_collections_with_status(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -300,7 +300,10 @@ def test_standardizer_plan_operation_reports_skipped_non_ready_collections(
     ready_collection_dir = api.environment.collection_root / "audio_collection_ready"
     raw_only_collection_dir = api.environment.collection_root / "audio_collection_raw_only"
     ready_collection_dir.mkdir()
+    (ready_collection_dir / "clips_labelled").mkdir()
+    (ready_collection_dir / "hums_segmented").mkdir()
     raw_only_collection_dir.mkdir()
+    (raw_only_collection_dir / "raw_recordings").mkdir()
     identity_map_path = tmp_path / "identity_map.json"
     write_json(
         identity_map_path,
@@ -317,11 +320,11 @@ def test_standardizer_plan_operation_reports_skipped_non_ready_collections(
 
     def _fake_plan_renames_for_collection(
         **kwargs: object,
-    ) -> tuple[list[object], list[object], list[object]]:
+    ) -> tuple[list[object], list[object], list[object], list[object], list[object]]:
         collection_dir = kwargs["collection_dir"]
         if collection_dir == raw_only_collection_dir:
-            raise FileNotFoundError("Missing clips/hums")
-        return [], [], []
+            return [], [], [], [], []
+        return [], [], [], [], []
 
     monkeypatch.setattr(
         "alpaca_pipelines.workflow_ops.plan_renames_for_collection",
@@ -336,11 +339,25 @@ def test_standardizer_plan_operation_reports_skipped_non_ready_collections(
     assert persisted["result_summary"]["collections"] == [
         {
             "name": "audio_collection_ready",
+            "status": "ready",
+            "has_clips": True,
+            "has_hums": True,
+            "has_raw_recordings": False,
             "clip_renames": [],
+            "raw_recording_renames": [],
             "dir_renames": [],
-        }
+        },
+        {
+            "name": "audio_collection_raw_only",
+            "status": "raw_only",
+            "has_clips": False,
+            "has_hums": False,
+            "has_raw_recordings": True,
+            "clip_renames": [],
+            "raw_recording_renames": [],
+            "dir_renames": [],
+        },
     ]
-    assert persisted["result_summary"]["skipped_collections"] == ["audio_collection_raw_only"]
 
 
 def test_standardizer_apply_operation_completes(

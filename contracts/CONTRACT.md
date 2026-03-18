@@ -594,6 +594,77 @@ Hard rules:
 * The `files` array MUST have exactly one entry per `prediction_summary.json` file entry.
 * The system MUST fail immediately if any output `.txt` path already exists.
 
+### 5.6 Standardizer and dataset-builder workflow summary contract
+
+Workflow operation result summaries for standardizer and dataset-builder are
+public integration surfaces for `alpaca-ui`.
+
+#### 5.6.1 Standardizer scan summary
+
+`standardizer-scan` MUST report all collections under `ALPACA_COLLECTION_ROOT`
+with explicit capability/status fields. Supported collection statuses are:
+
+* `raw_only`
+* `clips_only`
+* `hums_only`
+* `ready`
+* `empty`
+
+Each collection detail item MUST include:
+
+* `name`
+* `clips_dir`
+* `hums_dir`
+* `raw_recordings_dir`
+* `clip_count`
+* `hum_count`
+* `raw_recording_count`
+* `has_clips`
+* `has_hums`
+* `has_raw_recordings`
+* `status`
+
+#### 5.6.2 Standardizer plan summary
+
+`standardizer-plan` MUST include all collections (no skip-list contract) and
+MUST include raw recording canonicalization planning alongside clip/hum renames.
+
+Raw recording canonicalization rule:
+
+* `<subject_id>_<YYYYMMDD>_<HHMMSS>.(WAV|CSV)`
+
+Strict consistency rule:
+
+* Plan MUST fail if any raw WAV/CSV file under `raw_recordings/` is not
+  represented in collection `recordings.json`.
+
+Plan payload MUST include `recordings_updates` entries describing the
+`recordings.json` path updates required by the planned raw renames.
+
+#### 5.6.3 Standardizer apply summary and rollback
+
+`standardizer-apply` MUST apply filesystem renames and `recordings.json` path
+updates as one operation. On failure, rollback coverage must include both:
+
+* filesystem rename rollback
+* `recordings.json` content rollback
+
+#### 5.6.4 Standardizer index summary
+
+`standardizer-index` MUST emit per-collection index artifacts for every
+collection. Raw-only collections MUST produce index payloads with:
+
+* `entries = []`
+* `recordings` metadata preserved
+
+Merged index recordings MUST include recordings from all collections.
+
+#### 5.6.5 Dataset build zero-target failure
+
+Dataset positives are sourced only from hum index entries. Raw audio remains a
+noise source. If the target pool is empty, `dataset-build` MUST fail with an
+explicit error.
+
 ---
 
 ## 6) Contract reminders (implementation constraints)

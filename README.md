@@ -179,13 +179,25 @@ For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and 
 The standardizer is now phase-based:
 
 1. `standardizer-import` imports raw batch directories like `401_m28_20250213` into canonical `audio_collection_<batch>` collections.
-2. `standardizer-scan` reports whether collections are raw-only or ready for rename/index work.
-3. `standardizer-plan` and `standardizer-index` skip collections that do not yet have standardized `clips_labelled/` and `hums_segmented/` content.
-4. `standardizer-apply` still applies a previously generated rename plan.
+2. `standardizer-scan` reports explicit capability/status for every collection:
+   `raw_only`, `clips_only`, `hums_only`, `ready`, or `empty`.
+3. `standardizer-plan` includes every collection and now plans canonical renames for:
+   - labelled clips
+   - segmented hums
+   - raw `raw_recordings/*.WAV` and `raw_recordings/*.CSV`
+4. Raw canonicalization uses `<subject_id>_<YYYYMMDD>_<HHMMSS>.(WAV|CSV)` and enforces strict `recordings.json` consistency:
+   - plan fails if any raw WAV/CSV file is not represented in `recordings.json`
+5. `standardizer-apply` applies filesystem renames and `recordings.json` path updates as one operation with rollback coverage.
+6. `standardizer-index` emits a per-collection index artifact for every collection.
+   Raw-only collections get `entries=[]` plus `recordings` metadata, and merged recordings include all collections.
 
 Raw-only collections remain valid inference sources. Prediction supports a
 collection mode that resolves `.wav` files from selected `audio_collection_*`
 directories (for example `raw_recordings/`) without requiring labeled clips.
+
+Dataset build still derives positive targets from hum index entries only. Raw
+audio remains a valid negative/noise source. If no labelled targets are
+available, `dataset-build` fails explicitly.
 
 Imported raw collections store source files under:
 

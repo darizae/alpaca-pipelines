@@ -104,6 +104,10 @@ def build_dataset(
         duration_tolerance_s=strategy_config.duration_tolerance_s,
         fs=fs,
     )
+    if not positive_snippets:
+        raise ValueError(
+            "Dataset build requires labelled target hums, but the target pool is empty."
+        )
 
     low_quality_negatives: list[SnippetEntry] = []
     if strategy_config.noise_mining.low_quality_as_negative:
