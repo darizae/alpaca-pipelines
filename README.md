@@ -11,6 +11,7 @@ dataset building, training, prediction, evaluation, RF training, and postprocess
 - **Evaluation** of predictions against ground truth
 - **RF filter** post-processing on prediction results
 - **Collection standardization** (scan, rename planning/apply, index generation)
+- **Raw AudioMoth import** into canonical collections with recorder sidecars
 - **Dataset building** and review workflows
 - **Post-processing** and export (Raven selection tables, aggregation)
 - **SLURM** batch script generation for HPC execution
@@ -115,7 +116,7 @@ make runtime-check
 
 On the HPC, `/projects/extern/...` may resolve to a canonical `/mnt/vast-kisski/...` path. That is acceptable as long as the venv and imported package still resolve to the same checkout.
 
-Do not launch `dataset-build`, `dataset-prepare-review`, `dataset-apply-review`, `standardizer-scan`, `standardizer-plan`, `standardizer-apply`, or `standardizer-index` until this preflight succeeds.
+Do not launch `dataset-build`, `dataset-prepare-review`, `dataset-apply-review`, `standardizer-import`, `standardizer-scan`, `standardizer-plan`, `standardizer-apply`, or `standardizer-index` until this preflight succeeds.
 
 ## Usage
 
@@ -157,6 +158,7 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `export-selection-tables`
 - `migrate-backend-meta`
 - `standardizer-scan`
+- `standardizer-import`
 - `standardizer-plan`
 - `standardizer-apply`
 - `standardizer-index`
@@ -171,6 +173,47 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `delete-failed-operation`
 
 For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
+
+### Standardizer workflow
+
+The standardizer is now phase-based:
+
+1. `standardizer-import` imports raw batch directories like `401_m28_20250213` into canonical `audio_collection_<batch>` collections.
+2. `standardizer-scan` reports whether collections are raw-only or ready for rename/index work.
+3. `standardizer-plan` and `standardizer-index` skip collections that do not yet have standardized `clips_labelled/` and `hums_segmented/` content.
+4. `standardizer-apply` still applies a previously generated rename plan.
+
+Raw-only collections remain valid inference sources. Prediction supports a
+collection mode that resolves `.wav` files from selected `audio_collection_*`
+directories (for example `raw_recordings/`) without requiring labeled clips.
+
+Imported raw collections store source files under:
+
+```text
+audio_collection_<batch>/
+├── raw_recordings/
+│   ├── <stem>.WAV
+│   ├── <stem>.CSV              # optional
+│   ├── DEVICE.TXT              # optional
+│   ├── SETTINGS.txt            # optional
+│   └── LOG.TXT                 # optional
+└── recordings.json
+```
+
+`recordings.json`, `merged_index.json`, and dataset `manifest.json` may now include additive recorder metadata:
+
+- source-recording summaries
+- optional per-second AudioMoth track points
+- `source_recording_key` joins from hums/snippets back to their source WAV
+- snippet-derived absolute timestamps and GPS midpoint fields when sidecars exist
+
+### Prediction input modes
+
+Prediction now supports three explicit input modes:
+
+1. `tape`: explicit `audio_files` list.
+2. `dataset`: dataset test split via `dataset_name`.
+3. `collection`: `collection_names` + `source_category_dirs` (for unlabeled collections).
 
 ### Post-processing: Raven selection tables (prediction runs)
 

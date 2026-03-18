@@ -37,7 +37,8 @@
       "default": "tape",
       "enum": [
         "tape",
-        "dataset"
+        "dataset",
+        "collection"
       ],
       "title": "Mode",
       "type": "string"
@@ -60,6 +61,20 @@
       ],
       "default": null,
       "title": "Dataset Name"
+    },
+    "collection_names": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Collection Names",
+      "type": "array"
+    },
+    "source_category_dirs": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Source Category Dirs",
+      "type": "array"
     },
     "sequence_length_ms": {
       "default": 1280,

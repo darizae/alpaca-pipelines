@@ -117,8 +117,9 @@ Any relative path read from JSON or CSV MUST be validated:
 
 ## 4) Read-only input contracts (JSON + CSV)
 
-You MUST implement reading/writing these JSON artifacts EXACTLY as specified.
-- Do not invent fields.
+You MUST implement reading/writing these JSON artifacts according to these shapes.
+- Required fields must exist as specified.
+- Additive recorder-metadata fields documented below are allowed on `merged_index.json` and dataset `manifest.json`.
 - Do not treat root-relative paths as absolute.
 
 ### 4.1 A) `merged_index.json` contract
@@ -131,7 +132,10 @@ Top-level JSON object:
   - `generated_at`: string (ISO8601 Z) (may exist)
   - `n_collections`: int
   - `n_total_hums`: int
-- `entries`: array of objects, each with EXACT fields:
+- `meta` MAY additionally include:
+  - `n_recordings`: int
+  - `n_recordings_with_sidecar`: int
+- `entries`: array of objects, each with required fields:
   - `collection`: string (e.g., `"audio_collection_1"`)
   - `subject_id`: string
   - `recording_date`: `"YYYY-MM-DD"`
@@ -143,6 +147,27 @@ Top-level JSON object:
   - `source_quality`: int
   - `keep`: bool
   - `hum_uid`: int
+  - `source_recording_key`: string or null
+- `recordings`: optional array of source-recording objects. When present, each item describes a canonical source WAV and optional recorder sidecars:
+  - `key`: string (`<subject_id>_<YYYYMMDD>_<HHMMSS>`)
+  - `collection`: string
+  - `subject_id`: string
+  - `deployment_token`: string or null
+  - `wav_path`: string root-relative to `ALPACA_COLLECTION_ROOT`
+  - `csv_path`: string root-relative or null
+  - `device_path`: string root-relative or null
+  - `settings_path`: string root-relative or null
+  - `log_path`: string root-relative or null
+  - `device_id`: string or null
+  - `firmware_version`: string or null
+  - `firmware_description`: string or null
+  - `settings`: object or null
+  - `start_time`: ISO8601 string or null
+  - `end_time`: ISO8601 string or null
+  - `duration_seconds`: float or null
+  - `sample_rate`: int or null
+  - `total_samples`: int or null
+  - `track_points`: array of recorder track points or null
 
 Example (verbatim shape; values are illustrative but consistent with the contract):
 
@@ -182,7 +207,7 @@ Hard rule:
 
 Top-level JSON object:
 
-* `meta`: object with EXACT fields:
+* `meta`: object with required fields:
 
   * `strategy_name`: string
   * `created_at`: string (ISO8601 Z)
@@ -194,8 +219,10 @@ Top-level JSON object:
   * `n_noise`: int
   * `manifest_hash`: string
   * `strategy_config`: object or null (if present, contains the dataset config used)
+  * `n_recordings`: int
+  * `n_recordings_with_sidecar`: int
 
-* `snippets`: array of objects with EXACT fields:
+* `snippets`: array of objects with required fields:
 
   * `uid`: int
   * `filename`: string (basename like `"noise-bg_001858_audio_collection_2.wav"`) stored under `<dataset_dir>/snippets/`
@@ -213,6 +240,16 @@ Top-level JSON object:
   * `recording_time`: string or null
   * `split`: `"train"` | `"val"` | `"test"` or null
   * `review_status`: `"pending"` | `"approved"` | `"rejected"`
+  * `source_recording_key`: string or null
+  * `source_recording_start_s`: float or null
+  * `source_recording_end_s`: float or null
+  * `snippet_started_at`: ISO8601 string or null
+  * `snippet_ended_at`: ISO8601 string or null
+  * `snippet_midpoint_latitude`: float or null
+  * `snippet_midpoint_longitude`: float or null
+  * `snippet_gps_status`: string or null
+
+* `recordings`: optional array with the same source-recording object shape described for `merged_index.json`.
 
 Example (verbatim shape; values from the provided snippet):
 
@@ -273,6 +310,14 @@ Hard rules:
 
 * `source_path` must be treated as ROOT-RELATIVE to a collection root (either `manifest.meta.collection_root` or `ALPACA_COLLECTION_ROOT` depending on how `alpaca-pipelines` is configured).
 * Validate no absolute/traversal, and resolve as `Path(collection_root) / source_path`.
+
+### 4.2.1 Recorder metadata extension
+
+Recorder metadata is additive and optional:
+
+* Existing standardized collections and datasets may omit `recordings`, `source_recording_key`, and all snippet-level recorder-derived fields.
+* Raw AudioMoth imports should populate these fields when the source sidecars exist.
+* Missing `*.CSV` is valid. In that case, source recordings may still exist with `csv_path = null`, `track_points = null`, and GPS-derived snippet fields set to `null`.
 
 ---
 
@@ -341,6 +386,14 @@ Hard rules:
 * Prediction outputs MUST be written only under the run directory for that run.
 * The system MUST fail immediately if any required file is missing or malformed.
 * The system MUST NOT guess or infer files by scanning directories. It MUST use explicit pointers / summaries described below.
+
+Prediction run specs support exactly three input modes:
+
+* `tape`: explicit `audio_files`
+* `dataset`: `dataset_name` test split
+* `collection`: `collection_names` + `source_category_dirs`
+
+For `collection` mode, each `collection_names` value MUST be an `audio_collection_*` directory under `ALPACA_COLLECTION_ROOT`, and `source_category_dirs` values MUST be safe single path segments.
 
 #### 5.4.1 Per-file prediction JSON
 
