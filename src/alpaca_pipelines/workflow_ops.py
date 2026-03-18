@@ -16,6 +16,7 @@ from alpaca_pipelines.collections.contracts import load_identity_map
 from alpaca_pipelines.collections.fs import FileSystem, RollbackIncompleteError
 from alpaca_pipelines.collections.paths import CategoryNames, find_collection_dirs
 from alpaca_pipelines.collections.planning.rename_plan import plan_renames_for_collection
+from alpaca_pipelines.collections.scanning import scan_collection
 from alpaca_pipelines.collections.workflows import (
     apply_rename_plan_file,
     build_indexes_from_identity_map_path,
@@ -143,7 +144,7 @@ class WorkflowOperationManager:
         operation = self._load_operation(state_path)
         if operation.status != "failed":
             raise ValueError(
-                "Cannot delete workflow operation {}: status is {} " "(expected failed)".format(
+                "Cannot delete workflow operation {}: status is {} (expected failed)".format(
                     job_id, operation.status
                 )
             )
@@ -268,6 +269,13 @@ class WorkflowOperationManager:
             report = scan_root(collection_root)
             artifact_path = Path(operation.artifact_path or job_dir / "scan_report.json")
             write_scan_report(report, artifact_path)
+            status_counts = {
+                "ready": 0,
+                "raw_only": 0,
+                "clips_only": 0,
+                "hums_only": 0,
+                "empty": 0,
+            }
             collections_detail = [
                 {
                     "name": str(item["collection"]),
@@ -277,11 +285,18 @@ class WorkflowOperationManager:
                     "clip_count": int(item["n_clips"]),
                     "hum_count": int(item["n_hums"]),
                     "raw_recording_count": int(item.get("n_raw_recordings", 0)),
+                    "has_clips": bool(item.get("has_clips", False)),
+                    "has_hums": bool(item.get("has_hums", False)),
+                    "has_raw_recordings": bool(item.get("has_raw_recordings", False)),
                     "status": str(item.get("status", "ready")),
                     "errors": [],
                 }
                 for item in report.payload["collections"]
             ]
+            for item in collections_detail:
+                item_status = str(item["status"])
+                if item_status in status_counts:
+                    status_counts[item_status] += 1
             return {
                 "collections": len(collections_detail),
                 "total_clips": sum(item["clip_count"] for item in collections_detail),
@@ -289,12 +304,7 @@ class WorkflowOperationManager:
                 "total_raw_recordings": sum(
                     item["raw_recording_count"] for item in collections_detail
                 ),
-                "ready_collections": sum(
-                    1 for item in collections_detail if item["status"] == "ready"
-                ),
-                "raw_only_collections": sum(
-                    1 for item in collections_detail if item["status"] == "raw_only"
-                ),
+                "status_counts": status_counts,
                 "has_errors": False,
                 "collections_detail": collections_detail,
             }
@@ -302,26 +312,32 @@ class WorkflowOperationManager:
             identity_map_path = Path(str(spec["identity_map_path"]))
             identity_map = load_identity_map(identity_map_path)
             collections: list[dict[str, Any]] = []
-            skipped_collections: list[str] = []
             total_file_renames = 0
             total_dir_renames = 0
             aggregated_ops: list[dict[str, str]] = []
             aggregated_clip_audit: list[dict[str, Any]] = []
             aggregated_hum_audit: list[dict[str, Any]] = []
+            aggregated_raw_audit: list[dict[str, Any]] = []
+            aggregated_recordings_updates: list[dict[str, Any]] = []
             for collection_dir in find_collection_dirs(collection_root, fs):
-                try:
-                    collection_ops, clip_audit, hum_audit = plan_renames_for_collection(
-                        collection_dir=collection_dir,
-                        identity_map=identity_map,
-                        category_names=CategoryNames(),
-                        fs=fs,
-                    )
-                except FileNotFoundError:
-                    skipped_collections.append(collection_dir.name)
-                    continue
+                (
+                    collection_ops,
+                    clip_audit,
+                    hum_audit,
+                    raw_audit,
+                    recording_updates,
+                ) = plan_renames_for_collection(
+                    collection_dir=collection_dir,
+                    identity_map=identity_map,
+                    category_names=CategoryNames(),
+                    fs=fs,
+                )
+                scan_result = scan_collection(collection_dir, CategoryNames(), fs)
                 aggregated_ops.extend([{"src": op.src, "dst": op.dst} for op in collection_ops])
                 aggregated_clip_audit.extend([row.__dict__ for row in clip_audit])
                 aggregated_hum_audit.extend([row.__dict__ for row in hum_audit])
+                aggregated_raw_audit.extend([row.__dict__ for row in raw_audit])
+                aggregated_recordings_updates.extend([row.__dict__ for row in recording_updates])
                 clip_renames = [
                     {
                         "src": row.old_path,
@@ -334,6 +350,15 @@ class WorkflowOperationManager:
                     }
                     for row in clip_audit
                 ]
+                raw_recording_renames = [
+                    {
+                        "src": row.old_path,
+                        "dst": row.new_path,
+                        "recording_key": row.recording_key,
+                        "kind": row.kind,
+                    }
+                    for row in raw_audit
+                ]
                 dir_renames = [
                     {"src": op.src, "dst": op.dst}
                     for op in collection_ops
@@ -344,7 +369,12 @@ class WorkflowOperationManager:
                 collections.append(
                     {
                         "name": collection_dir.name,
+                        "status": scan_result.status,
+                        "has_clips": scan_result.has_clips,
+                        "has_hums": scan_result.has_hums,
+                        "has_raw_recordings": scan_result.has_raw_recordings,
                         "clip_renames": clip_renames,
+                        "raw_recording_renames": raw_recording_renames,
                         "dir_renames": dir_renames,
                     }
                 )
@@ -354,7 +384,9 @@ class WorkflowOperationManager:
                 "audit": {
                     "clips": aggregated_clip_audit,
                     "hums": aggregated_hum_audit,
+                    "raw_recordings": aggregated_raw_audit,
                 },
+                "recordings_updates": aggregated_recordings_updates,
             }
             artifact_path = Path(operation.artifact_path or job_dir / "plan.json")
             write_json(artifact_path, payload)
@@ -367,7 +399,6 @@ class WorkflowOperationManager:
                 "has_collisions": False,
                 "artifact_hpc_path": str(artifact_path),
                 "collections": collections,
-                "skipped_collections": skipped_collections,
             }
         if operation.kind == "apply":
             plan_job_id = str(spec["plan_job_id"])
@@ -419,7 +450,6 @@ class WorkflowOperationManager:
                 "total_hums": kept + excluded,
                 "kept": kept,
                 "excluded": excluded,
-                "skipped_collections": list(getattr(index_report, "skipped_collections", [])),
                 "min_source_quality_to_keep": min_quality,
                 "generated_at": index_report.merged_payload.get("meta", {}).get(
                     "generated_at", _now_iso()
