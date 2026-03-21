@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from alpaca_pipelines.prediction.audio_sources import resolve_collection_audio_files
+from alpaca_pipelines.prediction.audio_sources import (
+    resolve_collection_audio_files,
+    resolve_tape_audio_files,
+)
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.executor import _prediction_output_path
 
@@ -40,6 +43,91 @@ def test_prediction_spec_collection_mode_rejects_invalid_collection_name() -> No
             mode="collection",
             collection_names=["raw_batch_388"],
             source_category_dirs=["raw_recordings"],
+        )
+
+
+def test_prediction_spec_accepts_tape_mode_with_tape_files() -> None:
+    spec = PredictionRunSpec.model_validate(
+        {
+            "model_path": "/models/final.pt",
+            "mode": "tape",
+            "tape_files": [
+                {
+                    "collection_name": "audio_collection_388_m32_20250213",
+                    "category_dir": "raw_recordings",
+                    "relative_path": "nested/example.wav",
+                }
+            ],
+        }
+    )
+
+    assert spec.mode == "tape"
+    assert len(spec.tape_files) == 1
+    assert spec.tape_files[0].collection_name == "audio_collection_388_m32_20250213"
+
+
+def test_prediction_spec_rejects_legacy_audio_files_field() -> None:
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        PredictionRunSpec.model_validate(
+            {
+                "model_path": "/models/final.pt",
+                "mode": "tape",
+                "audio_files": [
+                    "/collections/audio_collection_388_m32_20250213/raw_recordings/a.wav"
+                ],
+            }
+        )
+
+
+def test_resolve_tape_audio_files_resolves_handle_paths(tmp_path: Path) -> None:
+    collection_root = tmp_path / "collection-root"
+    source_dir = collection_root / "audio_collection_388_m32_20250213" / "raw_recordings" / "nested"
+    source_dir.mkdir(parents=True)
+    (source_dir / "example.wav").write_bytes(b"")
+
+    spec = PredictionRunSpec.model_validate(
+        {
+            "model_path": "/models/final.pt",
+            "mode": "tape",
+            "tape_files": [
+                {
+                    "collection_name": "audio_collection_388_m32_20250213",
+                    "category_dir": "raw_recordings",
+                    "relative_path": "nested/example.wav",
+                }
+            ],
+        }
+    )
+
+    files = resolve_tape_audio_files(
+        collection_root=collection_root,
+        tape_files=spec.tape_files,
+    )
+
+    assert files == [str(source_dir / "example.wav")]
+
+
+def test_resolve_tape_audio_files_rejects_missing_path(tmp_path: Path) -> None:
+    collection_root = tmp_path / "collection-root"
+    (collection_root / "audio_collection_388_m32_20250213" / "raw_recordings").mkdir(parents=True)
+    spec = PredictionRunSpec.model_validate(
+        {
+            "model_path": "/models/final.pt",
+            "mode": "tape",
+            "tape_files": [
+                {
+                    "collection_name": "audio_collection_388_m32_20250213",
+                    "category_dir": "raw_recordings",
+                    "relative_path": "missing.wav",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(FileNotFoundError, match="Tape file not found"):
+        resolve_tape_audio_files(
+            collection_root=collection_root,
+            tape_files=spec.tape_files,
         )
 
 

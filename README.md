@@ -223,7 +223,7 @@ audio_collection_<batch>/
 
 Prediction now supports three explicit input modes:
 
-1. `tape`: explicit `audio_files` list.
+1. `tape`: explicit `tape_files` handle list (`collection_name`, `category_dir`, `relative_path`).
 2. `dataset`: dataset test split via `dataset_name`.
 3. `collection`: `collection_names` + `source_category_dirs` (for unlabeled collections).
 

@@ -1,6 +1,7 @@
 {
   "$defs": {
     "NormalizationSpec": {
+      "additionalProperties": false,
       "description": "Normalization parameters for prediction.",
       "properties": {
         "mode": {
@@ -25,8 +26,33 @@
       },
       "title": "NormalizationSpec",
       "type": "object"
+    },
+    "TapeFileHandleSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "collection_name": {
+          "title": "Collection Name",
+          "type": "string"
+        },
+        "category_dir": {
+          "title": "Category Dir",
+          "type": "string"
+        },
+        "relative_path": {
+          "title": "Relative Path",
+          "type": "string"
+        }
+      },
+      "required": [
+        "collection_name",
+        "category_dir",
+        "relative_path"
+      ],
+      "title": "TapeFileHandleSpec",
+      "type": "object"
     }
   },
+  "additionalProperties": false,
   "description": "Complete specification for a prediction run.",
   "properties": {
     "model_path": {
@@ -43,11 +69,11 @@
       "title": "Mode",
       "type": "string"
     },
-    "audio_files": {
+    "tape_files": {
       "items": {
-        "type": "string"
+        "$ref": "#/$defs/TapeFileHandleSpec"
       },
-      "title": "Audio Files",
+      "title": "Tape Files",
       "type": "array"
     },
     "dataset_name": {

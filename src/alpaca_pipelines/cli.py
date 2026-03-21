@@ -11,7 +11,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
 
 from alpaca_pipelines.api import PipelineAPI
 from alpaca_pipelines.config import PipelineEnvironment
@@ -50,6 +50,18 @@ def _emit_json(payload: Any) -> None:
     sys.stdout.write("\n")
 
 
+def _format_error_message(exc: BaseException) -> str:
+    message = " ".join(str(exc).split())
+    if message:
+        return message
+    return exc.__class__.__name__
+
+
+def _exit_with_error(exc: BaseException) -> NoReturn:
+    print(_format_error_message(exc), file=sys.stderr)
+    sys.exit(1)
+
+
 def _run_state_payload(run_state: RunState) -> dict[str, Any]:
     return run_state.model_dump()
 
@@ -70,8 +82,7 @@ def _cmd_create(args: argparse.Namespace) -> None:
         else:
             raise ValueError("Unknown run type: {}".format(args.run_type))
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
     if args.json:
         _emit_json(_run_state_payload(run_state))
@@ -87,8 +98,7 @@ def _cmd_execute(args: argparse.Namespace) -> None:
         run_state = api.execute_run(args.run_id)
         print("Run {} completed with status: {}".format(run_state.run_id, run_state.status))
     except Exception as exc:
-        print("Run failed: {}".format(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(RuntimeError("Run failed: {}".format(exc)))
 
 
 def _cmd_list(args: argparse.Namespace) -> None:
@@ -120,8 +130,7 @@ def _cmd_inspect(args: argparse.Namespace) -> None:
     try:
         run_state = api.get_run_status(args.run_id)
     except FileNotFoundError as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
     if args.json:
         _emit_json(_run_state_payload(run_state))
@@ -166,8 +175,7 @@ def _cmd_cancel(args: argparse.Namespace) -> None:
     try:
         run_state = api.cancel_run(args.run_id)
     except (FileNotFoundError, RuntimeError, ValueError) as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
     if args.json:
         _emit_json(_run_state_payload(run_state))
@@ -188,8 +196,7 @@ def _cmd_generate_slurm(args: argparse.Namespace) -> None:
             slurm_config=slurm_config,
         )
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
     if args.json:
         _emit_json({"run_id": args.run_id, "script_path": str(script_path)})
@@ -208,8 +215,7 @@ def _cmd_submit(args: argparse.Namespace) -> None:
             slurm_config = SlurmConfig.model_validate(slurm_data)
         run_state = api.submit_run(args.run_id, slurm_config=slurm_config)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
     if args.json:
         _emit_json(_run_state_payload(run_state))
@@ -229,8 +235,7 @@ def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
             use_rf_filtered=args.use_rf_filtered,
         )
     except Exception as exc:
-        print("Export failed: {}".format(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(RuntimeError("Export failed: {}".format(exc)))
 
     if args.json:
         _emit_json(summary)
@@ -238,8 +243,7 @@ def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
 
     selection_tables_dir = summary.get("selection_tables_dir")
     if not isinstance(selection_tables_dir, str):
-        print("Export failed: missing selection_tables_dir", file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(RuntimeError("Export failed: missing selection_tables_dir"))
     summary_path = str(Path(selection_tables_dir) / "selection_tables_summary.json")
     print("Selection tables exported.")
     print("  Dir:      {}".format(selection_tables_dir))
@@ -259,8 +263,7 @@ def _cmd_migrate_backend_meta(args: argparse.Namespace) -> None:
     try:
         summary = api.migrate_backend_meta(runs_root=runs_root)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
     payload = summary.to_dict()
     if args.json:
@@ -277,8 +280,7 @@ def _cmd_standardizer_scan(args: argparse.Namespace) -> None:
     try:
         payload = api.start_standardizer_scan()
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -287,8 +289,7 @@ def _cmd_standardizer_import(args: argparse.Namespace) -> None:
     try:
         payload = api.start_standardizer_import(args.identity_map)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -297,8 +298,7 @@ def _cmd_standardizer_plan(args: argparse.Namespace) -> None:
     try:
         payload = api.start_standardizer_plan(args.identity_map)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -310,8 +310,7 @@ def _cmd_standardizer_apply(args: argparse.Namespace) -> None:
             confirmation_phrase=args.confirmation_phrase,
         )
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -323,8 +322,7 @@ def _cmd_standardizer_index(args: argparse.Namespace) -> None:
             min_quality=args.min_source_quality_to_keep,
         )
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -333,8 +331,7 @@ def _cmd_standardizer_job(args: argparse.Namespace) -> None:
     try:
         payload = api.get_workflow_operation(args.job_id)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -343,8 +340,7 @@ def _cmd_standardizer_status(args: argparse.Namespace) -> None:
     try:
         payload = api.get_standardizer_status()
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -357,8 +353,7 @@ def _cmd_dataset_build(args: argparse.Namespace) -> None:
             strategy_config=config_data,
         )
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -367,8 +362,7 @@ def _cmd_dataset_prepare_review(args: argparse.Namespace) -> None:
     try:
         payload = api.start_prepare_review(args.dataset_name)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -377,8 +371,7 @@ def _cmd_dataset_apply_review(args: argparse.Namespace) -> None:
     try:
         payload = api.start_apply_review(args.dataset_name, args.review_table)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -387,8 +380,7 @@ def _cmd_dataset_job(args: argparse.Namespace) -> None:
     try:
         payload = api.get_workflow_operation(args.job_id)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -397,8 +389,7 @@ def _cmd_dataset_status(args: argparse.Namespace) -> None:
     try:
         payload = api.get_dataset_builder_status()
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -407,8 +398,7 @@ def _cmd_execute_operation(args: argparse.Namespace) -> None:
     try:
         api.execute_workflow_operation(args.job_dir)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
 
 
 def _cmd_fail_operation(args: argparse.Namespace) -> None:
@@ -420,8 +410,7 @@ def _cmd_fail_operation(args: argparse.Namespace) -> None:
             error_kind=args.error_kind,
         )
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 
@@ -430,8 +419,7 @@ def _cmd_delete_failed_operation(args: argparse.Namespace) -> None:
     try:
         payload = api.delete_failed_workflow_operation(job_id=args.job_id)
     except Exception as exc:
-        print(str(exc), file=sys.stderr)
-        sys.exit(1)
+        _exit_with_error(exc)
     _emit_json(payload)
 
 

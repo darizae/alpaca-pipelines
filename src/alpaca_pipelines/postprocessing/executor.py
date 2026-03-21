@@ -163,7 +163,7 @@ def export_prediction_run_selection_tables(
         audio_file_value = entry["audio_file"]
         if not isinstance(audio_file_value, str) or not audio_file_value:
             raise ValueError(
-                "Invalid audio_file value " "in prediction_summary.json: {}".format(entry)
+                "Invalid audio_file value in prediction_summary.json: {}".format(entry)
             )
         audio_files.append(audio_file_value)
 
