@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from alpaca_pipelines.prediction.audio_sources import (
     resolve_collection_audio_files,
     resolve_tape_audio_files,

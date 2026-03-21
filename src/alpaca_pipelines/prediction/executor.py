@@ -15,6 +15,16 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
+
+from alpaca_pipelines.config import PipelineEnvironment
+from alpaca_pipelines.contracts import RunState
+from alpaca_pipelines.io_utils import write_json
+from alpaca_pipelines.prediction.audio_sources import (
+    resolve_collection_audio_files,
+    resolve_tape_audio_files,
+)
+from alpaca_pipelines.prediction.config import PredictionRunSpec
+from alpaca_pipelines.runs.manager import RunManager
 from bioacoustics_dl_toolbox.audio.datasets import StridedAudioDataset
 from bioacoustics_dl_toolbox.config import (
     ClassifierConfig,
@@ -26,16 +36,6 @@ from bioacoustics_dl_toolbox.logging.logger import create_logger
 from bioacoustics_dl_toolbox.models.classifier import Classifier
 from bioacoustics_dl_toolbox.models.encoder import ResidualEncoder
 from bioacoustics_dl_toolbox.training.checkpoints import load_model
-
-from alpaca_pipelines.config import PipelineEnvironment
-from alpaca_pipelines.contracts import RunState
-from alpaca_pipelines.io_utils import write_json
-from alpaca_pipelines.prediction.audio_sources import (
-    resolve_collection_audio_files,
-    resolve_tape_audio_files,
-)
-from alpaca_pipelines.prediction.config import PredictionRunSpec
-from alpaca_pipelines.runs.manager import RunManager
 
 logger = logging.getLogger(__name__)
 

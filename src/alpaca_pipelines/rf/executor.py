@@ -14,10 +14,10 @@ from typing import Any
 import joblib
 import numpy as np
 import soundfile as sf
-from bioacoustics_dl_toolbox.rf.features import compute_rf_features
-from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
 from alpaca_pipelines.io_utils import read_json, write_json
+from bioacoustics_dl_toolbox.rf.features import compute_rf_features
+from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
 
 def _load_rf_model(rf_model_path: str) -> RfClassifierProtocol:

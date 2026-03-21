@@ -15,8 +15,6 @@ import joblib
 import numpy as np
 import pandas as pd
 import soundfile as sf
-from bioacoustics_dl_toolbox.logging.logger import create_logger
-from bioacoustics_dl_toolbox.rf.features import compute_rf_features
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import (
     accuracy_score,
@@ -32,6 +30,8 @@ from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
 from alpaca_pipelines.io_utils import write_json
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
+from bioacoustics_dl_toolbox.logging.logger import create_logger
+from bioacoustics_dl_toolbox.rf.features import compute_rf_features
 
 logger = logging.getLogger(__name__)
 

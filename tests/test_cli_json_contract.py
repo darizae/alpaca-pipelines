@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+
 from alpaca_pipelines.cli import main
 from alpaca_pipelines.contracts import RunState, WorkflowOperation
 
@@ -224,7 +225,7 @@ def test_prediction_review_preview_json_writes_single_json_document(
             "session_id": "session-1",
             "item_id": item_id,
             "summary_path": (
-                "/runs/prediction/run-1/outputs/manual_review/session-1/" "preview_item-1.json"
+                "/runs/prediction/run-1/outputs/manual_review/session-1/preview_item-1.json"
             ),
             "item": {},
         }
