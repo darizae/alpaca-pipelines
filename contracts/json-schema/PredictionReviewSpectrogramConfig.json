@@ -1,0 +1,80 @@
+{
+  "additionalProperties": false,
+  "description": "Spectrogram rendering configuration for prediction manual review.",
+  "properties": {
+    "window_function": {
+      "const": "hann",
+      "default": "hann",
+      "title": "Window Function",
+      "type": "string"
+    },
+    "window_size_samples": {
+      "default": 2002,
+      "title": "Window Size Samples",
+      "type": "integer"
+    },
+    "hop_size_samples": {
+      "default": 1001,
+      "title": "Hop Size Samples",
+      "type": "integer"
+    },
+    "dft_size": {
+      "default": 2048,
+      "title": "Dft Size",
+      "type": "integer"
+    },
+    "clipping_enabled": {
+      "default": false,
+      "title": "Clipping Enabled",
+      "type": "boolean"
+    },
+    "clipping_min_db": {
+      "default": -120.0,
+      "title": "Clipping Min Db",
+      "type": "number"
+    },
+    "clipping_max_db": {
+      "default": 0.0,
+      "title": "Clipping Max Db",
+      "type": "number"
+    },
+    "averaging": {
+      "default": 1,
+      "title": "Averaging",
+      "type": "integer"
+    },
+    "auto_apply": {
+      "default": false,
+      "title": "Auto Apply",
+      "type": "boolean"
+    },
+    "colormap": {
+      "const": "magma",
+      "default": "magma",
+      "title": "Colormap",
+      "type": "string"
+    },
+    "show_axes": {
+      "default": true,
+      "title": "Show Axes",
+      "type": "boolean"
+    },
+    "x_axis_label": {
+      "default": "Time (s)",
+      "title": "X Axis Label",
+      "type": "string"
+    },
+    "y_axis_label": {
+      "default": "Frequency (kHz)",
+      "title": "Y Axis Label",
+      "type": "string"
+    },
+    "show_colorbar": {
+      "default": true,
+      "title": "Show Colorbar",
+      "type": "boolean"
+    }
+  },
+  "title": "PredictionReviewSpectrogramConfig",
+  "type": "object"
+}

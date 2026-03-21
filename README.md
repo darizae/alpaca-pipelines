@@ -8,6 +8,7 @@ dataset building, training, prediction, evaluation, RF training, and postprocess
 
 - **Training** CNN-based hum detectors (ResNet encoder + classifier)
 - **Prediction** (inference) on audio tapes via sliding window
+- **Prediction manual review artifacts** (preview/batch spectrogram + clip generation, export copy)
 - **Evaluation** of predictions against ground truth
 - **RF filter** post-processing on prediction results
 - **Collection standardization** (scan, rename planning/apply, index generation)
@@ -143,6 +144,15 @@ make generate-slurm RUN_ID=<uuid>
 
 # Migrate legacy submission metadata into run_state.json
 alpaca-pipelines migrate-backend-meta --json
+
+# Generate a one-item manual-review preview from a session manifest
+alpaca-pipelines prediction-review-preview --manifest /path/to/session_manifest.json --item-id <item-id> --json
+
+# Generate all manual-review artifacts for a session manifest
+alpaca-pipelines prediction-review-generate --manifest /path/to/session_manifest.json --json
+
+# Export generated manual-review artifacts (single item or full session)
+alpaca-pipelines prediction-review-export --manifest /path/to/session_manifest.json --destination-dir /path/to/export --item-id <item-id> --json
 ```
 
 ### CLI JSON mode
@@ -157,6 +167,9 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `generate-slurm`
 - `export-selection-tables`
 - `migrate-backend-meta`
+- `prediction-review-preview`
+- `prediction-review-generate`
+- `prediction-review-export`
 - `standardizer-scan`
 - `standardizer-import`
 - `standardizer-plan`
@@ -173,6 +186,28 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `delete-failed-operation`
 
 For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
+
+### Prediction manual-review artifact contract
+
+`alpaca-pipelines` provides a dedicated manual-review spectrogram schema
+(`PredictionReviewSpectrogramConfig`) that is separate from training/evaluation
+spectrogram settings.
+
+Default values (also in [`configs/prediction_review_spectrogram_example.json`](configs/prediction_review_spectrogram_example.json)):
+
+- Hann window (`window_function="hann"`)
+- `window_size_samples=2002`
+- `hop_size_samples=1001` (50% overlap)
+- `dft_size=2048`
+- `clipping_enabled=false`
+- `averaging=1`
+- `auto_apply=false`
+- `colormap="magma"`
+- labeled axes (`Time (s)`, `Frequency (kHz)`) and colorbar enabled
+
+Artifact layout is deterministic per prediction run/session:
+
+`ALPACA_RUNS_ROOT/prediction/<run_id>/outputs/manual_review/<session_id>/...`
 
 ### Standardizer workflow
 

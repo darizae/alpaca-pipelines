@@ -16,6 +16,7 @@ from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState, RunStatus, RunType
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
+from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_meta
@@ -417,6 +418,58 @@ class PipelineAPI:
     # ------------------------------------------------------------------
     # Post-processing
     # ------------------------------------------------------------------
+
+    def generate_prediction_review_preview(
+        self,
+        *,
+        manifest_path: Path,
+        item_id: str,
+        spectrogram_config: PredictionReviewSpectrogramConfig | None = None,
+    ) -> dict[str, Any]:
+        from alpaca_pipelines.prediction.review.executor import (
+            generate_prediction_review_preview,
+        )
+
+        return generate_prediction_review_preview(
+            run_manager=self.run_manager,
+            manifest_path=manifest_path,
+            item_id=item_id,
+            spectrogram_config=spectrogram_config,
+        )
+
+    def generate_prediction_review_batch(
+        self,
+        *,
+        manifest_path: Path,
+        spectrogram_config: PredictionReviewSpectrogramConfig | None = None,
+    ) -> dict[str, Any]:
+        from alpaca_pipelines.prediction.review.executor import (
+            generate_prediction_review_batch,
+        )
+
+        return generate_prediction_review_batch(
+            run_manager=self.run_manager,
+            manifest_path=manifest_path,
+            spectrogram_config=spectrogram_config,
+        )
+
+    def export_prediction_review_artifacts(
+        self,
+        *,
+        manifest_path: Path,
+        destination_dir: Path,
+        item_id: str | None = None,
+    ) -> dict[str, Any]:
+        from alpaca_pipelines.prediction.review.executor import (
+            export_prediction_review_artifacts,
+        )
+
+        return export_prediction_review_artifacts(
+            run_manager=self.run_manager,
+            manifest_path=manifest_path,
+            destination_dir=destination_dir,
+            item_id=item_id,
+        )
 
     def export_detections_to_selection_table(
         self,

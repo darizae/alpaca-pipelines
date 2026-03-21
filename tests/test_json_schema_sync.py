@@ -6,6 +6,10 @@ from pathlib import Path
 from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
+from alpaca_pipelines.prediction.review import (
+    PredictionReviewSessionManifest,
+    PredictionReviewSpectrogramConfig,
+)
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.training.config import TrainingRunSpec
@@ -18,6 +22,8 @@ def test_committed_json_schemas_match_current_models() -> None:
     models: dict[str, type[BaseModel]] = {
         "TrainingRunSpec": TrainingRunSpec,
         "PredictionRunSpec": PredictionRunSpec,
+        "PredictionReviewSpectrogramConfig": PredictionReviewSpectrogramConfig,
+        "PredictionReviewSessionManifest": PredictionReviewSessionManifest,
         "EvaluationRunSpec": EvaluationRunSpec,
         "RfTrainingRunSpec": RfTrainingRunSpec,
         "SlurmConfig": SlurmConfig,

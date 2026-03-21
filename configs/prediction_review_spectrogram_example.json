@@ -1,0 +1,16 @@
+{
+  "window_function": "hann",
+  "window_size_samples": 2002,
+  "hop_size_samples": 1001,
+  "dft_size": 2048,
+  "clipping_enabled": false,
+  "clipping_min_db": -120.0,
+  "clipping_max_db": 0.0,
+  "averaging": 1,
+  "auto_apply": false,
+  "colormap": "magma",
+  "show_axes": true,
+  "x_axis_label": "Time (s)",
+  "y_axis_label": "Frequency (kHz)",
+  "show_colorbar": true
+}
