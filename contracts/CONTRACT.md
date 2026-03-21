@@ -596,6 +596,107 @@ Hard rules:
 * The `files` array MUST have exactly one entry per `prediction_summary.json` file entry.
 * The system MUST fail immediately if any output `.txt` path already exists.
 
+#### 5.5.5 Prediction manual-review artifacts contract (required)
+
+This section specifies the persisted manual-review generation/export interface for completed prediction runs.
+
+##### 5.5.5.1 Commands and schema inputs (required)
+
+`alpaca-pipelines` MUST expose these CLI commands (and equivalent `PipelineAPI` methods):
+
+* `prediction-review-preview`
+* `prediction-review-generate`
+* `prediction-review-export`
+
+Manifest/config contracts are defined by:
+
+* `contracts/json-schema/PredictionReviewSessionManifest.json`
+* `contracts/json-schema/PredictionReviewSpectrogramConfig.json`
+
+Hard rules:
+
+* Manual-review spectrogram config is a dedicated schema and MUST remain separate from training/evaluation spectrogram schemas.
+* Manifest `schema_version` MUST be `1`.
+* `session_id` and `item_id` values MUST be safe path segments.
+* Manifest `audio_file` values MUST be present in prediction `outputs/predictions/prediction_summary.json` for `prediction_run_id`.
+
+##### 5.5.5.2 Session artifact layout (required)
+
+Generated artifacts MUST be stored under:
+
+`ALPACA_RUNS_ROOT/prediction/<run_id>/outputs/manual_review/<session_id>/`
+
+Required files:
+
+* Batch summary: `summary.json`
+* Per-item directory: `items/<item_id>/`
+  * `spectrogram.png`
+  * `clip.wav`
+  * `artifact_metadata.json`
+
+Preview command MAY additionally persist:
+
+* `preview_<item_id>.json`
+
+Hard rules:
+
+* Generation/export MUST fail immediately if required source artifacts are missing.
+* Export MUST fail immediately when a destination target already exists.
+* Export artifacts MUST preserve per-item grouping under `<destination>/<session_id>/<item_id>/...`.
+
+##### 5.5.5.3 JSON payload contract (required)
+
+`prediction-review-generate --json` summary payload MUST include:
+
+* `mode` (`"batch"`)
+* `prediction_run_id`
+* `session_id`
+* `session_dir`
+* `summary_path`
+* `spectrogram_config`
+* `n_items`
+* `items` (array)
+
+Each `items[]` entry MUST include:
+
+* `item_id`
+* `audio_file`
+* `start_s`
+* `end_s`
+* `spectrogram_png`
+* `clip_wav`
+* `metadata_json`
+* `relative_spectrogram_png`
+* `relative_clip_wav`
+* `relative_metadata_json`
+* `spectrogram_shape`
+* `clip_duration_s`
+
+`prediction-review-preview --json` payload MUST include:
+
+* `mode` (`"preview"`)
+* `prediction_run_id`
+* `session_id`
+* `item_id`
+* `spectrogram_config`
+* `item` (single entry with the same item shape as above)
+* `summary_path`
+
+`prediction-review-export --json` payload MUST include:
+
+* `prediction_run_id`
+* `session_id`
+* `destination_dir`
+* `summary_path`
+* `n_items`
+* `items` (array)
+
+Each export `items[]` entry MUST include:
+
+* `item_id`
+* `source` (`spectrogram_png`, `clip_wav`, `metadata_json`)
+* `destination` (`spectrogram_png`, `clip_wav`, `metadata_json`)
+
 ### 5.6 Standardizer and dataset-builder workflow summary contract
 
 Workflow operation result summaries for standardizer and dataset-builder are
