@@ -495,7 +495,7 @@ class PipelineAPI:
         summary_path_value = selection_tables_summary.get("selection_tables_dir")
         if not isinstance(summary_path_value, str) or not summary_path_value:
             raise ValueError(
-                "Invalid selection table summary " "payload (missing selection_tables_dir)"
+                "Invalid selection table summary payload (missing selection_tables_dir)"
             )
 
         summary_file_path = selection_tables_dir / "selection_tables_summary.json"

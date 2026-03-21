@@ -1,9 +1,17 @@
 {
   "model_path": "/path/to/runs/training/<run_id>/outputs/model/trained_model.pt",
   "mode": "tape",
-  "audio_files": [
-    "/path/to/audio/tape_001.wav",
-    "/path/to/audio/tape_002.wav"
+  "tape_files": [
+    {
+      "collection_name": "audio_collection_alpha",
+      "category_dir": "raw_recordings",
+      "relative_path": "tape_001.wav"
+    },
+    {
+      "collection_name": "audio_collection_beta",
+      "category_dir": "raw_recordings",
+      "relative_path": "nested/tape_002.wav"
+    }
   ],
   "sequence_length_ms": 1280,
   "hop_ms": 640,

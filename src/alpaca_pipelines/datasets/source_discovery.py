@@ -6,7 +6,7 @@ from pathlib import Path, PurePosixPath
 from alpaca_pipelines.collections.parsing.patterns import CANONICAL_CLIP_RE
 from alpaca_pipelines.datasets.audio_utils import wav_duration_seconds
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
-from alpaca_pipelines.datasets.paths import find_collection_dirs, rglob_wavs
+from alpaca_pipelines.datasets.paths import rglob_wavs
 from alpaca_pipelines.recordings import (
     SourceRecording,
     derive_source_recording_key,
@@ -28,15 +28,23 @@ class SourceAudioFile:
 
 def discover_source_files(
     collection_root: Path,
+    collection_names: list[str],
     source_category_dirs: list[str],
     fs: FileSystem = _DEFAULT_FS,
 ) -> list[SourceAudioFile]:
-    collection_dirs = find_collection_dirs(collection_root, fs)
     sources: list[SourceAudioFile] = []
-
     root_posix = PurePosixPath(collection_root.as_posix())
+    seen_collections: set[str] = set()
 
-    for collection_dir in collection_dirs:
+    for collection_name in collection_names:
+        if collection_name in seen_collections:
+            continue
+        seen_collections.add(collection_name)
+        collection_dir = collection_root / collection_name
+        if not fs.exists(collection_dir):
+            raise FileNotFoundError("Collection directory not found: {}".format(collection_dir))
+        if not fs.is_dir(collection_dir):
+            raise ValueError("Collection path is not a directory: {}".format(collection_dir))
         collection_recordings = load_collection_recordings(collection_dir, fs)
         recordings_by_key = {recording.key: recording for recording in collection_recordings}
         for category_name in source_category_dirs:
@@ -83,7 +91,11 @@ def discover_source_files(
 
     if not sources:
         raise FileNotFoundError(
-            f"No source audio files found in {source_category_dirs} under {collection_root}"
+            "No source audio files found in {} for collections {} under {}".format(
+                source_category_dirs,
+                sorted(seen_collections),
+                collection_root,
+            )
         )
 
     return sources

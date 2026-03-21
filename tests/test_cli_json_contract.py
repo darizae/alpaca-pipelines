@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -57,6 +58,38 @@ def test_submit_json_failure_writes_only_stderr(
     assert excinfo.value.code == 1
     assert captured.out == ""
     assert captured.err.strip() == "submission failed"
+
+
+def test_create_json_validation_failure_writes_single_line_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    config_path = tmp_path / "invalid_prediction.json"
+    config_path.write_text("{}", encoding="utf-8")
+    api = SimpleNamespace(create_prediction_run=lambda spec: _run_state())
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "create",
+            "prediction",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 1
+    assert captured.out == ""
+    assert captured.err.count("\n") == 1
+    assert "PredictionRunSpec" in captured.err
 
 
 def test_fail_operation_json_writes_single_json_document(

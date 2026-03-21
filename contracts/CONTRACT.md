@@ -266,6 +266,8 @@ Example (verbatim shape; values from the provided snippet):
     "n_noise": 3038,
     "manifest_hash": "997be7ab601c8584301de9d21cc7ab59b2a9e58f02a2a784f9602bdfde8f32d3",
     "strategy_config": {
+      "target_collection_names": ["audio_collection_1"],
+      "noise_collection_names": ["audio_collection_1", "audio_collection_2"],
       "split_strategy": "clipwise_balanced",
       "seed": 42,
       "min_quality": 2,
@@ -389,7 +391,7 @@ Hard rules:
 
 Prediction run specs support exactly three input modes:
 
-* `tape`: explicit `audio_files`
+* `tape`: explicit `tape_files` handles (`collection_name`, `category_dir`, `relative_path`)
 * `dataset`: `dataset_name` test split
 * `collection`: `collection_names` + `source_category_dirs`
 

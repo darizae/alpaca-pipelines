@@ -82,6 +82,14 @@ def build_dataset(
         index_payload.entries,
         key=lambda e: (e.collection, e.subject_id, e.recording_date, e.hum_uid),
     )
+    target_collection_names = set(strategy_config.target_collection_names)
+    noise_collection_names = set(strategy_config.noise_collection_names)
+    target_entries = [
+        entry for entry in sorted_entries if entry.collection in target_collection_names
+    ]
+    noise_entries = [
+        entry for entry in sorted_entries if entry.collection in noise_collection_names
+    ]
 
     dataset_dir = datasets_root / strategy_name
     if fs.exists(dataset_dir):
@@ -95,7 +103,7 @@ def build_dataset(
     uid_counter: count[int] = count(1)
 
     positive_snippets = select_positives(
-        entries=sorted_entries,
+        entries=target_entries,
         recordings_by_key=recordings_by_key,
         min_quality=strategy_config.min_quality,
         collection_root=collection_root,
@@ -112,7 +120,7 @@ def build_dataset(
     low_quality_negatives: list[SnippetEntry] = []
     if strategy_config.noise_mining.low_quality_as_negative:
         low_quality_negatives = select_low_quality_as_negatives(
-            entries=sorted_entries,
+            entries=noise_entries,
             recordings_by_key=recordings_by_key,
             low_quality_threshold=strategy_config.noise_mining.low_quality_threshold,
             collection_root=collection_root,
@@ -124,6 +132,7 @@ def build_dataset(
 
     source_files = discover_source_files(
         collection_root=collection_root,
+        collection_names=strategy_config.noise_collection_names,
         source_category_dirs=strategy_config.noise_mining.source_category_dirs,
         fs=fs,
     )

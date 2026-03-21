@@ -30,7 +30,10 @@ from bioacoustics_dl_toolbox.training.checkpoints import load_model
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.io_utils import write_json
-from alpaca_pipelines.prediction.audio_sources import resolve_collection_audio_files
+from alpaca_pipelines.prediction.audio_sources import (
+    resolve_collection_audio_files,
+    resolve_tape_audio_files,
+)
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 
@@ -238,7 +241,10 @@ def execute_prediction(
 
         audio_files: list[str] = []
         if spec.mode == "tape":
-            audio_files = list(spec.audio_files)
+            audio_files = resolve_tape_audio_files(
+                collection_root=environment.collection_root,
+                tape_files=spec.tape_files,
+            )
         elif spec.mode == "dataset":
             if spec.dataset_name is None:
                 raise ValueError("Prediction mode is 'dataset' but dataset_name is not set")

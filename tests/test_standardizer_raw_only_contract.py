@@ -322,6 +322,8 @@ def test_dataset_build_fails_when_target_pool_is_empty(tmp_path: Path) -> None:
 
     strategy_config = StrategyConfig.model_validate(
         {
+            "target_collection_names": ["audio_collection_ready"],
+            "noise_collection_names": ["audio_collection_raw"],
             "split_strategy": "random",
             "seed": 42,
             "min_quality": 2,
@@ -343,6 +345,69 @@ def test_dataset_build_fails_when_target_pool_is_empty(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="target pool is empty"):
         build_dataset(
             strategy_name="dataset_zero_target",
+            strategy_config=strategy_config,
+            collection_root=collection_root,
+            merged_index_path=merged_index_path,
+            datasets_root=datasets_root,
+        )
+
+
+def test_dataset_build_filters_target_collections_before_positive_selection(
+    tmp_path: Path,
+) -> None:
+    collection_root = tmp_path / "collection"
+    datasets_root = tmp_path / "datasets"
+    merged_index_path = collection_root / "merged_index.json"
+    collection_root.mkdir()
+    datasets_root.mkdir()
+    write_json(
+        merged_index_path,
+        {
+            "meta": {"n_collections": 1},
+            "entries": [
+                {
+                    "collection": "audio_collection_other",
+                    "subject_id": "401",
+                    "recording_date": "2025-02-11",
+                    "recording_time": "07:55:58",
+                    "hum_path": "audio_collection_other/hums_segmented/clip.wav",
+                    "hum_start_s": 0.0,
+                    "hum_end_s": 1.0,
+                    "source_quality": 4,
+                    "keep": True,
+                    "hum_uid": 1,
+                    "source_recording_key": None,
+                }
+            ],
+            "recordings": [],
+        },
+    )
+
+    strategy_config = StrategyConfig.model_validate(
+        {
+            "target_collection_names": ["audio_collection_target"],
+            "noise_collection_names": ["audio_collection_noise"],
+            "split_strategy": "random",
+            "seed": 42,
+            "min_quality": 2,
+            "noise_per_positive": 1.0,
+            "noise_mining": {
+                "attempts_per_slot": 20,
+                "source_category_dirs": ["raw_recordings"],
+                "low_quality_as_negative": False,
+                "low_quality_threshold": 1,
+            },
+            "split_fractions": [0.7, 0.15, 0.15],
+            "duration_tolerance_s": 0.1,
+            "review_gap_s": 0.5,
+            "freq_low_hz": 0,
+            "freq_high_hz": 4000,
+        }
+    )
+
+    with pytest.raises(ValueError, match="target pool is empty"):
+        build_dataset(
+            strategy_name="dataset_filtered_target",
             strategy_config=strategy_config,
             collection_root=collection_root,
             merged_index_path=merged_index_path,

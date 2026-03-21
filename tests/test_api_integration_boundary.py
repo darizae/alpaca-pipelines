@@ -60,6 +60,46 @@ def test_submit_run_persists_submitted_at_and_slurm_job_id(
     assert persisted["submitted_at"] == submitted.submitted_at
 
 
+def test_submit_run_failed_sbatch_leaves_state_unchanged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    run_state = api.create_training_run(_training_spec())
+    script_path = Path(run_state.run_dir) / "slurm" / "job.sbatch"
+
+    monkeypatch.setattr("alpaca_pipelines.api.generate_slurm_script", lambda **_: script_path)
+    monkeypatch.setattr(
+        "alpaca_pipelines.api.subprocess.run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=args[0],
+            returncode=1,
+            stdout="",
+            stderr="submission error",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="submission error"):
+        api.submit_run(run_state.run_id)
+
+    persisted = read_json(Path(run_state.run_dir) / "run_state.json")
+    assert persisted["status"] == "created"
+    assert persisted["submitted_at"] is None
+    assert persisted["slurm_job_id"] is None
+
+
+def test_cancel_created_run_marks_cancelled(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    run_state = api.create_training_run(_training_spec())
+
+    cancelled = api.cancel_run(run_state.run_id)
+
+    assert cancelled.status == "cancelled"
+    assert cancelled.completed_at is not None
+
+
 def test_cancel_submitted_run_calls_scancel_and_marks_cancelled(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -121,6 +161,45 @@ def test_migrate_backend_meta_backfills_missing_submission_fields(
     assert persisted["slurm_job_id"] == "12345"
 
 
+def test_migrate_backend_meta_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    run_state = api.create_training_run(_training_spec())
+    run_dir = Path(run_state.run_dir)
+    write_json(
+        run_dir / "backend_meta.json",
+        {
+            "submitted_at": "2026-03-10T12:00:00Z",
+            "slurm_job_id": "12345",
+        },
+    )
+
+    first = api.migrate_backend_meta()
+    second = api.migrate_backend_meta()
+
+    persisted = read_json(run_dir / "run_state.json")
+    assert first.migrated == [str(run_dir)]
+    assert second.migrated == []
+    assert persisted["submitted_at"] == "2026-03-10T12:00:00Z"
+    assert persisted["slurm_job_id"] == "12345"
+
+
+def test_migrate_backend_meta_ignores_alpaca_ui_jobs(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    ui_job_dir = api.environment.runs_root / "alpaca-ui-jobs" / "job-1"
+    ui_job_dir.mkdir(parents=True)
+    write_json(ui_job_dir / "state.json", {"status": "pending"})
+
+    summary = api.migrate_backend_meta()
+
+    assert all("alpaca-ui-jobs" not in path for path in summary.migrated)
+    assert all("alpaca-ui-jobs" not in path for path in summary.skipped)
+    assert all("alpaca-ui-jobs" not in path for path in summary.inconsistent)
+
+
 def test_migrate_backend_meta_fails_on_conflicting_existing_values(
     tmp_path: Path,
 ) -> None:
@@ -168,6 +247,8 @@ def test_fail_workflow_operation_marks_pending_job_failed(
     operation = api.start_dataset_build(
         strategy_name="dataset-a",
         strategy_config={
+            "target_collection_names": ["audio_collection_alpha"],
+            "noise_collection_names": ["audio_collection_alpha"],
             "split_strategy": "clipwise_balanced",
             "seed": 42,
             "min_quality": 2,
@@ -206,6 +287,8 @@ def test_delete_failed_workflow_operation_removes_job_dir(
     operation = api.start_dataset_build(
         strategy_name="dataset-a",
         strategy_config={
+            "target_collection_names": ["audio_collection_alpha"],
+            "noise_collection_names": ["audio_collection_alpha"],
             "split_strategy": "clipwise_balanced",
             "seed": 42,
             "min_quality": 2,

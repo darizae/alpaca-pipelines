@@ -77,6 +77,8 @@ def test_spawn_worker_uses_cli_module_invocation(
     operation = api.start_dataset_build(
         strategy_name="dataset-a",
         strategy_config={
+            "target_collection_names": ["audio_collection_alpha"],
+            "noise_collection_names": ["audio_collection_alpha"],
             "split_strategy": "clipwise_balanced",
             "seed": 42,
             "min_quality": 2,
@@ -479,6 +481,8 @@ def test_dataset_build_operation_completes(
     operation = api.start_dataset_build(
         strategy_name="strategy-a",
         strategy_config={
+            "target_collection_names": ["audio_collection_alpha"],
+            "noise_collection_names": ["audio_collection_alpha"],
             "split_strategy": "clipwise_balanced",
             "seed": 42,
             "min_quality": 2,
@@ -759,6 +763,8 @@ def test_start_dataset_build_ignores_stale_dead_job_for_same_strategy(
     operation = api.start_dataset_build(
         strategy_name="strategy-a",
         strategy_config={
+            "target_collection_names": ["audio_collection_alpha"],
+            "noise_collection_names": ["audio_collection_alpha"],
             "split_strategy": "clipwise_balanced",
             "seed": 42,
             "min_quality": 2,

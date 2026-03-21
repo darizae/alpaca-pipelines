@@ -155,7 +155,7 @@ def _parse_batch_dir_name(name: str) -> tuple[str, str | None]:
     parts = name.split("_")
     if len(parts) < 2:
         raise ValueError(
-            "Raw batch directory must include subject alias and deployment token: " f"{name}"
+            f"Raw batch directory must include subject alias and deployment token: {name}"
         )
     return parts[0], parts[1] or None
 
