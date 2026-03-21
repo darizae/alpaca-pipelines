@@ -14,6 +14,13 @@ from typing import Any
 import numpy as np
 import torch
 import torch.nn as nn
+
+from alpaca_pipelines.config import PipelineEnvironment
+from alpaca_pipelines.contracts import RunState
+from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
+from alpaca_pipelines.evaluation.config import EvaluationRunSpec
+from alpaca_pipelines.io_utils import read_json, write_json
+from alpaca_pipelines.runs.manager import RunManager
 from bioacoustics_dl_toolbox.config import (
     AugmentationConfig,
     ClassifierConfig,
@@ -31,13 +38,6 @@ from bioacoustics_dl_toolbox.metrics.core import (
     Precision,
     Recall,
 )
-
-from alpaca_pipelines.config import PipelineEnvironment
-from alpaca_pipelines.contracts import RunState
-from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
-from alpaca_pipelines.evaluation.config import EvaluationRunSpec
-from alpaca_pipelines.io_utils import read_json, write_json
-from alpaca_pipelines.runs.manager import RunManager
 
 logger = logging.getLogger(__name__)
 

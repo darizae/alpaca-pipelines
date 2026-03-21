@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from alpaca_pipelines.collections.contracts import IdentityMap
 from alpaca_pipelines.collections.fs import LocalFS
 from alpaca_pipelines.collections.paths import CategoryNames

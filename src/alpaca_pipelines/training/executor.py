@@ -14,6 +14,17 @@ from typing import Any, cast
 
 import torch
 import torch.nn as nn
+
+from alpaca_pipelines.config import PipelineEnvironment
+from alpaca_pipelines.contracts import (
+    TRAINING_HISTORY_FILENAME,
+    TRAINING_SUMMARY_FILENAME,
+    RunState,
+)
+from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
+from alpaca_pipelines.io_utils import write_json
+from alpaca_pipelines.runs.manager import RunManager
+from alpaca_pipelines.training.config import TrainingRunSpec
 from bioacoustics_dl_toolbox.audio.datasets import SpectrogramDataset
 from bioacoustics_dl_toolbox.config import (
     AugmentationConfig,
@@ -29,17 +40,6 @@ from bioacoustics_dl_toolbox.models.classifier import Classifier
 from bioacoustics_dl_toolbox.models.encoder import ResidualEncoder
 from bioacoustics_dl_toolbox.training.checkpoints import save_model
 from bioacoustics_dl_toolbox.training.trainer import Trainer
-
-from alpaca_pipelines.config import PipelineEnvironment
-from alpaca_pipelines.contracts import (
-    TRAINING_HISTORY_FILENAME,
-    TRAINING_SUMMARY_FILENAME,
-    RunState,
-)
-from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
-from alpaca_pipelines.io_utils import write_json
-from alpaca_pipelines.runs.manager import RunManager
-from alpaca_pipelines.training.config import TrainingRunSpec
 
 logger = logging.getLogger(__name__)
 
