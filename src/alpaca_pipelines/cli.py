@@ -18,6 +18,7 @@ from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
+from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.training.config import TrainingRunSpec
@@ -64,6 +65,15 @@ def _exit_with_error(exc: BaseException) -> NoReturn:
 
 def _run_state_payload(run_state: RunState) -> dict[str, Any]:
     return run_state.model_dump()
+
+
+def _load_review_spectrogram_config(
+    config_path: str | None,
+) -> PredictionReviewSpectrogramConfig | None:
+    if config_path is None:
+        return None
+    config_data = _load_json_config(config_path)
+    return PredictionReviewSpectrogramConfig.model_validate(config_data)
 
 
 def _cmd_create(args: argparse.Namespace) -> None:
@@ -273,6 +283,72 @@ def _cmd_migrate_backend_meta(args: argparse.Namespace) -> None:
     print("Migration complete.")
     print("  Migrated: {}".format(len(summary.migrated)))
     print("  Skipped: {}".format(len(summary.skipped)))
+
+
+def _cmd_prediction_review_preview(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.generate_prediction_review_preview(
+            manifest_path=Path(args.manifest),
+            item_id=args.item_id,
+            spectrogram_config=_load_review_spectrogram_config(args.spectrogram_config),
+        )
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(payload)
+        return
+
+    print("Prediction review preview generated.")
+    print("  Run:      {}".format(payload["prediction_run_id"]))
+    print("  Session:  {}".format(payload["session_id"]))
+    print("  Item:     {}".format(payload["item_id"]))
+    print("  Summary:  {}".format(payload["summary_path"]))
+
+
+def _cmd_prediction_review_generate(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.generate_prediction_review_batch(
+            manifest_path=Path(args.manifest),
+            spectrogram_config=_load_review_spectrogram_config(args.spectrogram_config),
+        )
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(payload)
+        return
+
+    print("Prediction review batch generation complete.")
+    print("  Run:      {}".format(payload["prediction_run_id"]))
+    print("  Session:  {}".format(payload["session_id"]))
+    print("  Items:    {}".format(payload["n_items"]))
+    print("  Summary:  {}".format(payload["summary_path"]))
+
+
+def _cmd_prediction_review_export(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.export_prediction_review_artifacts(
+            manifest_path=Path(args.manifest),
+            destination_dir=Path(args.destination_dir),
+            item_id=args.item_id,
+        )
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(payload)
+        return
+
+    print("Prediction review export complete.")
+    print("  Run:          {}".format(payload["prediction_run_id"]))
+    print("  Session:      {}".format(payload["session_id"]))
+    print("  Destination:  {}".format(payload["destination_dir"]))
+    print("  Items:        {}".format(payload["n_items"]))
+    print("  Summary:      {}".format(payload["summary_path"]))
 
 
 def _cmd_standardizer_scan(args: argparse.Namespace) -> None:
@@ -504,6 +580,23 @@ def _build_parser() -> argparse.ArgumentParser:
     migrate_parser.add_argument("--runs-root", default=None)
     migrate_parser.add_argument("--json", action="store_true")
 
+    review_preview_parser = subparsers.add_parser("prediction-review-preview")
+    review_preview_parser.add_argument("--manifest", required=True)
+    review_preview_parser.add_argument("--item-id", required=True)
+    review_preview_parser.add_argument("--spectrogram-config", default=None)
+    review_preview_parser.add_argument("--json", action="store_true")
+
+    review_generate_parser = subparsers.add_parser("prediction-review-generate")
+    review_generate_parser.add_argument("--manifest", required=True)
+    review_generate_parser.add_argument("--spectrogram-config", default=None)
+    review_generate_parser.add_argument("--json", action="store_true")
+
+    review_export_parser = subparsers.add_parser("prediction-review-export")
+    review_export_parser.add_argument("--manifest", required=True)
+    review_export_parser.add_argument("--destination-dir", required=True)
+    review_export_parser.add_argument("--item-id", default=None)
+    review_export_parser.add_argument("--json", action="store_true")
+
     standardizer_scan_parser = subparsers.add_parser("standardizer-scan")
     standardizer_scan_parser.add_argument("--json", action="store_true")
 
@@ -591,6 +684,9 @@ def main() -> None:
         "submit": _cmd_submit,
         "export-selection-tables": _cmd_export_selection_tables,
         "migrate-backend-meta": _cmd_migrate_backend_meta,
+        "prediction-review-preview": _cmd_prediction_review_preview,
+        "prediction-review-generate": _cmd_prediction_review_generate,
+        "prediction-review-export": _cmd_prediction_review_export,
         "standardizer-scan": _cmd_standardizer_scan,
         "standardizer-import": _cmd_standardizer_import,
         "standardizer-plan": _cmd_standardizer_plan,

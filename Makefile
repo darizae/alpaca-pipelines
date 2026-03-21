@@ -20,6 +20,7 @@ RUN_CONFIG ?=
         execute-run list-runs inspect-run cancel-run \
         generate-slurm submit-run \
         export-prediction-selection-tables clean-stale-workflow-job delete-failed-workflow-job \
+        prediction-review-preview prediction-review-generate prediction-review-export \
         clean-run
 
 venv:
@@ -107,6 +108,37 @@ export-prediction-selection-tables: env-check
 		$(VENV_PYTHON) -m alpaca_pipelines.cli export-selection-tables --run-id "$(RUN_ID)" --freq-low-hz "$(FREQ_LOW_HZ)" --freq-high-hz "$(FREQ_HIGH_HZ)" --use-rf-filtered; \
 	else \
 		$(VENV_PYTHON) -m alpaca_pipelines.cli export-selection-tables --run-id "$(RUN_ID)" --freq-low-hz "$(FREQ_LOW_HZ)" --freq-high-hz "$(FREQ_HIGH_HZ)"; \
+	fi
+
+PREDICTION_REVIEW_MANIFEST ?=
+PREDICTION_REVIEW_ITEM_ID ?=
+PREDICTION_REVIEW_SPECTROGRAM_CONFIG ?=
+PREDICTION_REVIEW_EXPORT_DIR ?=
+
+prediction-review-preview: env-check
+	@test -n "$(PREDICTION_REVIEW_MANIFEST)" || (echo "Usage: make prediction-review-preview PREDICTION_REVIEW_MANIFEST=<path> PREDICTION_REVIEW_ITEM_ID=<id> [PREDICTION_REVIEW_SPECTROGRAM_CONFIG=<path>]"; exit 1)
+	@test -n "$(PREDICTION_REVIEW_ITEM_ID)" || (echo "Usage: make prediction-review-preview PREDICTION_REVIEW_MANIFEST=<path> PREDICTION_REVIEW_ITEM_ID=<id> [PREDICTION_REVIEW_SPECTROGRAM_CONFIG=<path>]"; exit 1)
+	@if [ -n "$(PREDICTION_REVIEW_SPECTROGRAM_CONFIG)" ]; then \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-preview --manifest "$(PREDICTION_REVIEW_MANIFEST)" --item-id "$(PREDICTION_REVIEW_ITEM_ID)" --spectrogram-config "$(PREDICTION_REVIEW_SPECTROGRAM_CONFIG)"; \
+	else \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-preview --manifest "$(PREDICTION_REVIEW_MANIFEST)" --item-id "$(PREDICTION_REVIEW_ITEM_ID)"; \
+	fi
+
+prediction-review-generate: env-check
+	@test -n "$(PREDICTION_REVIEW_MANIFEST)" || (echo "Usage: make prediction-review-generate PREDICTION_REVIEW_MANIFEST=<path> [PREDICTION_REVIEW_SPECTROGRAM_CONFIG=<path>]"; exit 1)
+	@if [ -n "$(PREDICTION_REVIEW_SPECTROGRAM_CONFIG)" ]; then \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-generate --manifest "$(PREDICTION_REVIEW_MANIFEST)" --spectrogram-config "$(PREDICTION_REVIEW_SPECTROGRAM_CONFIG)"; \
+	else \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-generate --manifest "$(PREDICTION_REVIEW_MANIFEST)"; \
+	fi
+
+prediction-review-export: env-check
+	@test -n "$(PREDICTION_REVIEW_MANIFEST)" || (echo "Usage: make prediction-review-export PREDICTION_REVIEW_MANIFEST=<path> PREDICTION_REVIEW_EXPORT_DIR=<path> [PREDICTION_REVIEW_ITEM_ID=<id>]"; exit 1)
+	@test -n "$(PREDICTION_REVIEW_EXPORT_DIR)" || (echo "Usage: make prediction-review-export PREDICTION_REVIEW_MANIFEST=<path> PREDICTION_REVIEW_EXPORT_DIR=<path> [PREDICTION_REVIEW_ITEM_ID=<id>]"; exit 1)
+	@if [ -n "$(PREDICTION_REVIEW_ITEM_ID)" ]; then \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-export --manifest "$(PREDICTION_REVIEW_MANIFEST)" --destination-dir "$(PREDICTION_REVIEW_EXPORT_DIR)" --item-id "$(PREDICTION_REVIEW_ITEM_ID)"; \
+	else \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-export --manifest "$(PREDICTION_REVIEW_MANIFEST)" --destination-dir "$(PREDICTION_REVIEW_EXPORT_DIR)"; \
 	fi
 
 clean-stale-workflow-job: env-check
