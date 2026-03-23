@@ -402,6 +402,13 @@ Prediction run specs support exactly three input modes:
 * `dataset`: `dataset_name` test split
 * `collection`: `collection_names` + `source_category_dirs`
 
+Prediction run spec hard-field rules:
+
+* `model_path` is the required model pointer for prediction execution.
+* `rf_model_path` is the optional RF pointer used only when `apply_rf_filter=true`.
+* Orchestration linkage fields such as `training_run_id` and `rf_training_run_id` are NOT part of `PredictionRunSpec` and MUST NOT be present in the spec payload persisted for a run.
+* Additional unknown fields in prediction specs are forbidden.
+
 For `collection` mode, each `collection_names` value MUST be an `audio_collection_*` directory under `ALPACA_COLLECTION_ROOT`, and `source_category_dirs` values MUST be safe single path segments.
 
 #### 5.4.1 Per-file prediction JSON
