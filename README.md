@@ -24,7 +24,7 @@ dataset building, training, prediction, evaluation, RF training, and postprocess
 ```
 
 ┌─────────────────────────────────────────────────┐
-│  Future Backend / REST API                       │
+│  alpaca-ui Backend / REST API                    │
 │  (drives PipelineAPI programmatically)           │
 ├─────────────────────────────────────────────────┤
 │  alpaca-pipelines                                │
@@ -86,6 +86,7 @@ UI-only catalog boundary:
 
 - `alpaca-pipelines` remains filesystem-only and database-unaware.
 - If `alpaca-ui` uses PostgreSQL for metadata projection, it must ingest from these filesystem contracts.
+- Run deletion is backend-owned in `alpaca-ui`: delete the run directory under `ALPACA_RUNS_ROOT/<run_type>/<run_id>` and prune UI metadata in Postgres. `alpaca-pipelines` does not expose a run-delete command.
 
 ## HPC runtime preflight
 
@@ -185,7 +186,7 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `fail-operation`
 - `delete-failed-operation`
 
-For service integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`.
+For run lifecycle integration, `alpaca-ui` uses `create --json`, `submit --json`, and `cancel --json`. Run deletion is handled by `alpaca-ui` outside the `alpaca-pipelines` CLI.
 
 ### Prediction manual-review artifact contract
 
@@ -386,6 +387,8 @@ created → submitted → running → completed
                              → failed
          → cancelled (from created or submitted)
 ```
+
+Run deletion is external to this state machine. When an external orchestrator deletes a run directory, that run simply disappears from list/inspect surfaces because `run_state.json` no longer exists.
 
 Each run is stored as a folder under `ALPACA_RUNS_ROOT/<run_type>/<run_id>/`
 containing `run_state.json`, `logs/`, `outputs/`, and `slurm/`.

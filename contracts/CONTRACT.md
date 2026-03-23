@@ -37,6 +37,11 @@ If validation fails, the system MUST fail immediately with a clear error.
 - Runs MUST NOT mutate each other's state.
 - Concurrent runs are safe because they operate on separate directories.
 
+### 1.6 Run deletion ownership
+- The `alpaca-pipelines` run lifecycle contract does not include a `deleted` state and does not expose a run-delete API.
+- External orchestrators may delete a run only by removing `ALPACA_RUNS_ROOT/<run_type>/<run_id>/` after enforcing their own active-job safety checks.
+- If a run directory is deleted externally, `alpaca-pipelines` must treat the run as non-existent.
+
 ---
 
 ## 2) Required environment variables and defaults (exact paths)
@@ -368,6 +373,8 @@ created → submitted → running → completed
                              → failed
          → cancelled (from created or submitted)
 ```
+
+`deleted` is not a run-state transition. Deletion is represented by external removal of the run directory.
 
 ### 5.3 Immutable run specifications (hard)
 
