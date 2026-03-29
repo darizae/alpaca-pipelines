@@ -328,6 +328,27 @@ def _cmd_prediction_review_generate(args: argparse.Namespace) -> None:
     print("  Summary:  {}".format(payload["summary_path"]))
 
 
+def _cmd_prediction_review_concat(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.concatenate_prediction_review_clips(
+            manifest_path=Path(args.manifest),
+            output_wav=Path(args.output_wav) if args.output_wav is not None else None,
+        )
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(payload)
+        return
+
+    print("Prediction review concat complete.")
+    print("  Run:      {}".format(payload["prediction_run_id"]))
+    print("  Session:  {}".format(payload["session_id"]))
+    print("  Items:    {}".format(payload["n_items"]))
+    print("  Concat:   {}".format(payload["concat_wav"]))
+
+
 def _cmd_prediction_review_export(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
@@ -591,6 +612,11 @@ def _build_parser() -> argparse.ArgumentParser:
     review_generate_parser.add_argument("--spectrogram-config", default=None)
     review_generate_parser.add_argument("--json", action="store_true")
 
+    review_concat_parser = subparsers.add_parser("prediction-review-concat")
+    review_concat_parser.add_argument("--manifest", required=True)
+    review_concat_parser.add_argument("--output-wav", default=None)
+    review_concat_parser.add_argument("--json", action="store_true")
+
     review_export_parser = subparsers.add_parser("prediction-review-export")
     review_export_parser.add_argument("--manifest", required=True)
     review_export_parser.add_argument("--destination-dir", required=True)
@@ -686,6 +712,7 @@ def main() -> None:
         "migrate-backend-meta": _cmd_migrate_backend_meta,
         "prediction-review-preview": _cmd_prediction_review_preview,
         "prediction-review-generate": _cmd_prediction_review_generate,
+        "prediction-review-concat": _cmd_prediction_review_concat,
         "prediction-review-export": _cmd_prediction_review_export,
         "standardizer-scan": _cmd_standardizer_scan,
         "standardizer-import": _cmd_standardizer_import,

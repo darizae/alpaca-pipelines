@@ -25,6 +25,8 @@ matplotlib.use("Agg")
 
 _MANUAL_REVIEW_DIR = "manual_review"
 _SESSION_SUMMARY_FILENAME = "summary.json"
+_RAVEN_DIR = "raven"
+_RAVEN_CONCAT_FILENAME = "review_concat.wav"
 
 
 def generate_prediction_review_preview(
@@ -98,6 +100,71 @@ def generate_prediction_review_batch(
     }
     write_json(summary_path, payload)
     return payload
+
+
+def concatenate_prediction_review_clips(
+    *,
+    run_manager: RunManager,
+    manifest_path: Path,
+    output_wav: Path | None = None,
+) -> dict[str, Any]:
+    manifest = _load_manifest(manifest_path)
+    run_state = _resolve_prediction_run(run_manager, manifest.prediction_run_id)
+    _validate_manifest_audio_inventory(run_state, manifest)
+
+    session_dir = _session_dir(run_state, manifest.session_id)
+    output_path = (
+        output_wav if output_wav is not None else session_dir / _RAVEN_DIR / _RAVEN_CONCAT_FILENAME
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    audio_cache: dict[str, tuple[np.ndarray, int]] = {}
+    segments: list[np.ndarray] = []
+    offsets: list[dict[str, float | str]] = []
+    samplerate: int | None = None
+    current_offset = 0.0
+    for item in manifest.items:
+        cached_audio = audio_cache.get(item.audio_file)
+        if cached_audio is None:
+            cached_audio = _load_mono_audio(Path(item.audio_file))
+            audio_cache[item.audio_file] = cached_audio
+        mono_audio, item_samplerate = cached_audio
+        if samplerate is None:
+            samplerate = item_samplerate
+        elif item_samplerate != samplerate:
+            raise ValueError(
+                "All prediction review clips must have the same sample rate for concatenation"
+            )
+        clip, _, _ = _extract_item_clip(
+            item=item,
+            mono_audio=mono_audio,
+            sample_rate=item_samplerate,
+        )
+        clip_duration_s = float(clip.shape[0]) / float(item_samplerate)
+        begin_time_s = current_offset
+        end_time_s = begin_time_s + clip_duration_s
+        offsets.append(
+            {
+                "item_id": item.item_id,
+                "begin_time_s": begin_time_s,
+                "end_time_s": end_time_s,
+            }
+        )
+        segments.append(clip)
+        current_offset = end_time_s
+
+    if samplerate is None or not segments:
+        raise ValueError("Prediction review manifest has no clips to concatenate")
+    concatenated = np.concatenate(segments)
+    sf.write(output_path, concatenated.astype(np.float32), samplerate)
+
+    return {
+        "prediction_run_id": manifest.prediction_run_id,
+        "session_id": manifest.session_id,
+        "concat_wav": str(output_path),
+        "n_items": len(offsets),
+        "items": offsets,
+    }
 
 
 def export_prediction_review_artifacts(
@@ -284,38 +351,12 @@ def _generate_item_artifacts(
     item: PredictionReviewSessionItem,
     config: PredictionReviewSpectrogramConfig,
 ) -> dict[str, Any]:
-    audio, sample_rate = sf.read(item.audio_file, always_2d=True, dtype="float32")
-    if audio.size == 0:
-        raise ValueError("Audio file is empty: {}".format(item.audio_file))
-
-    mono_audio = np.mean(audio, axis=1)
-    total_samples = int(mono_audio.shape[0])
-
-    start_sample = int(round(item.start_s * sample_rate))
-    end_sample = int(round(item.end_s * sample_rate))
-
-    if start_sample < 0:
-        raise ValueError("start_s resolves to negative sample index: {}".format(item.start_s))
-    if end_sample > total_samples:
-        raise ValueError(
-            "end_s resolves outside audio bounds: end_s={} total_samples={} sample_rate={}".format(
-                item.end_s,
-                total_samples,
-                sample_rate,
-            )
-        )
-    if end_sample <= start_sample:
-        raise ValueError(
-            "Invalid clip bounds for item {}: start_s={} end_s={}".format(
-                item.item_id,
-                item.start_s,
-                item.end_s,
-            )
-        )
-
-    clip = mono_audio[start_sample:end_sample]
-    if clip.size == 0:
-        raise ValueError("Generated clip is empty for item: {}".format(item.item_id))
+    mono_audio, sample_rate = _load_mono_audio(Path(item.audio_file))
+    clip, start_sample, end_sample = _extract_item_clip(
+        item=item,
+        mono_audio=mono_audio,
+        sample_rate=sample_rate,
+    )
 
     spectrogram_db, freqs_hz, times_s = _compute_spectrogram(
         clip=clip,
@@ -474,6 +515,49 @@ def _spectrogram_config_payload(config: PredictionReviewSpectrogramConfig) -> di
     payload = config.model_dump()
     payload["overlap_percent"] = config.overlap_percent()
     return payload
+
+
+def _load_mono_audio(audio_file: Path) -> tuple[np.ndarray, int]:
+    audio, sample_rate = sf.read(audio_file, always_2d=True, dtype="float32")
+    if audio.size == 0:
+        raise ValueError("Audio file is empty: {}".format(audio_file))
+    mono_audio = np.mean(audio, axis=1)
+    return mono_audio, int(sample_rate)
+
+
+def _extract_item_clip(
+    *,
+    item: PredictionReviewSessionItem,
+    mono_audio: np.ndarray,
+    sample_rate: int,
+) -> tuple[np.ndarray, int, int]:
+    total_samples = int(mono_audio.shape[0])
+    start_sample = int(round(item.start_s * sample_rate))
+    end_sample = int(round(item.end_s * sample_rate))
+
+    if start_sample < 0:
+        raise ValueError("start_s resolves to negative sample index: {}".format(item.start_s))
+    if end_sample > total_samples:
+        raise ValueError(
+            "end_s resolves outside audio bounds: end_s={} total_samples={} sample_rate={}".format(
+                item.end_s,
+                total_samples,
+                sample_rate,
+            )
+        )
+    if end_sample <= start_sample:
+        raise ValueError(
+            "Invalid clip bounds for item {}: start_s={} end_s={}".format(
+                item.item_id,
+                item.start_s,
+                item.end_s,
+            )
+        )
+
+    clip = mono_audio[start_sample:end_sample]
+    if clip.size == 0:
+        raise ValueError("Generated clip is empty for item: {}".format(item.item_id))
+    return clip, start_sample, end_sample
 
 
 def _is_safe_path_segment(value: str) -> bool:

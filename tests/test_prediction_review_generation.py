@@ -188,3 +188,52 @@ def test_prediction_review_batch_summary_is_deterministic_and_export_supports_si
     for entry in batch_export["items"]:
         assert Path(entry["destination"]["spectrogram_png"]).is_file()
         assert Path(entry["destination"]["clip_wav"]).is_file()
+
+
+def test_prediction_review_concat_creates_single_review_wav_without_spectrogram_generation(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(api, audio_file=audio_file)
+
+    manifest_path = tmp_path / "review_manifest_concat.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_concat",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                },
+                {
+                    "item_id": "item_002",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.9,
+                    "end_s": 1.4,
+                },
+            ],
+        },
+    )
+
+    payload = api.concatenate_prediction_review_clips(manifest_path=manifest_path)
+
+    concat_path = Path(payload["concat_wav"])
+    assert concat_path.is_file()
+    assert payload["n_items"] == 2
+    assert payload["items"][0]["item_id"] == "item_001"
+    assert payload["items"][1]["item_id"] == "item_002"
+    assert payload["items"][0]["begin_time_s"] == pytest.approx(0.0, abs=1e-6)
+    assert payload["items"][0]["end_time_s"] == pytest.approx(0.6, abs=1e-6)
+    assert payload["items"][1]["begin_time_s"] == pytest.approx(0.6, abs=1e-6)
+    assert payload["items"][1]["end_time_s"] == pytest.approx(1.1, abs=1e-6)
+
+    session_dir = concat_path.parent.parent
+    assert session_dir.name == "session_concat"
+    assert not (session_dir / "items").exists()
