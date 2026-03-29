@@ -20,7 +20,7 @@ RUN_CONFIG ?=
         execute-run list-runs inspect-run cancel-run \
         generate-slurm submit-run \
         export-prediction-selection-tables clean-stale-workflow-job delete-failed-workflow-job \
-        prediction-review-preview prediction-review-generate prediction-review-export \
+        prediction-review-preview prediction-review-generate prediction-review-concat prediction-review-export \
         clean-run
 
 venv:
@@ -113,6 +113,7 @@ export-prediction-selection-tables: env-check
 PREDICTION_REVIEW_MANIFEST ?=
 PREDICTION_REVIEW_ITEM_ID ?=
 PREDICTION_REVIEW_SPECTROGRAM_CONFIG ?=
+PREDICTION_REVIEW_CONCAT_OUTPUT ?=
 PREDICTION_REVIEW_EXPORT_DIR ?=
 
 prediction-review-preview: env-check
@@ -130,6 +131,14 @@ prediction-review-generate: env-check
 		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-generate --manifest "$(PREDICTION_REVIEW_MANIFEST)" --spectrogram-config "$(PREDICTION_REVIEW_SPECTROGRAM_CONFIG)"; \
 	else \
 		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-generate --manifest "$(PREDICTION_REVIEW_MANIFEST)"; \
+	fi
+
+prediction-review-concat: env-check
+	@test -n "$(PREDICTION_REVIEW_MANIFEST)" || (echo "Usage: make prediction-review-concat PREDICTION_REVIEW_MANIFEST=<path> [PREDICTION_REVIEW_CONCAT_OUTPUT=<path>]"; exit 1)
+	@if [ -n "$(PREDICTION_REVIEW_CONCAT_OUTPUT)" ]; then \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-concat --manifest "$(PREDICTION_REVIEW_MANIFEST)" --output-wav "$(PREDICTION_REVIEW_CONCAT_OUTPUT)"; \
+	else \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli prediction-review-concat --manifest "$(PREDICTION_REVIEW_MANIFEST)"; \
 	fi
 
 prediction-review-export: env-check

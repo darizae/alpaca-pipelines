@@ -453,6 +453,22 @@ class PipelineAPI:
             spectrogram_config=spectrogram_config,
         )
 
+    def concatenate_prediction_review_clips(
+        self,
+        *,
+        manifest_path: Path,
+        output_wav: Path | None = None,
+    ) -> dict[str, Any]:
+        from alpaca_pipelines.prediction.review.executor import (
+            concatenate_prediction_review_clips,
+        )
+
+        return concatenate_prediction_review_clips(
+            run_manager=self.run_manager,
+            manifest_path=manifest_path,
+            output_wav=output_wav,
+        )
+
     def export_prediction_review_artifacts(
         self,
         *,

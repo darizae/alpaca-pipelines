@@ -290,6 +290,45 @@ def test_prediction_review_generate_json_writes_single_json_document(
     assert payload["n_items"] == 2
 
 
+def test_prediction_review_concat_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        concatenate_prediction_review_clips=lambda manifest_path, output_wav: {
+            "prediction_run_id": "run-1",
+            "session_id": "session-1",
+            "concat_wav": (
+                "/runs/prediction/run-1/outputs/manual_review/session-1/raven/review_concat.wav"
+            ),
+            "n_items": 2,
+            "items": [],
+        }
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "prediction-review-concat",
+            "--manifest",
+            "/tmp/session.json",
+            "--output-wav",
+            "/tmp/review_concat.wav",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["n_items"] == 2
+    assert payload["concat_wav"].endswith("review_concat.wav")
+
+
 def test_prediction_review_export_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
