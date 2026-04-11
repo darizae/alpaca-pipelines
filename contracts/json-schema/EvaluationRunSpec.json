@@ -1,5 +1,6 @@
 {
   "description": "Complete specification for an evaluation run.",
+  "additionalProperties": false,
   "properties": {
     "prediction_run_id": {
       "anyOf": [
@@ -46,8 +47,8 @@
       "title": "Split",
       "type": "string"
     },
-    "sequence_length": {
-      "title": "Sequence Length",
+    "sequence_length_ms": {
+      "title": "Sequence Length Ms",
       "type": "integer"
     },
     "batch_size": {
@@ -73,7 +74,7 @@
   },
   "required": [
     "dataset_name",
-    "sequence_length"
+    "sequence_length_ms"
   ],
   "title": "EvaluationRunSpec",
   "type": "object"

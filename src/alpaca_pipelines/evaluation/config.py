@@ -9,11 +9,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class EvaluationRunSpec(BaseModel):
     """Complete specification for an evaluation run."""
+
+    model_config = ConfigDict(extra="forbid")
 
     prediction_run_id: str | None = None
     predictions_dir: str | None = None
@@ -26,7 +28,7 @@ class EvaluationRunSpec(BaseModel):
 
     split: Literal["train", "val", "test"] = "test"
 
-    sequence_length: int
+    sequence_length_ms: int
     batch_size: int = 16
     num_workers: int = 4
     use_cuda: bool = True

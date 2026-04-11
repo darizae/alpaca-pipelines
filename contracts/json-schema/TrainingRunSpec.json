@@ -290,6 +290,7 @@
     }
   },
   "description": "Complete specification for a training run.\n\nThis is serialized into run_state.json and is immutable after creation.\nThe backend or CLI constructs this, the executor consumes it.",
+  "additionalProperties": false,
   "properties": {
     "dataset_name": {
       "title": "Dataset Name",
@@ -300,9 +301,9 @@
       "title": "Run Name",
       "type": "string"
     },
-    "sequence_length": {
-      "default": 128,
-      "title": "Sequence Length",
+    "sequence_length_ms": {
+      "default": 400,
+      "title": "Sequence Length Ms",
       "type": "integer"
     },
     "spectrogram": {

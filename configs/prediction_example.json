@@ -13,8 +13,8 @@
       "relative_path": "nested/tape_002.wav"
     }
   ],
-  "sequence_length_ms": 1280,
-  "hop_ms": 640,
+  "sequence_length_ms": 400,
+  "hop_ms": 50,
   "batch_size": 16,
   "num_workers": 4,
   "use_cuda": true,

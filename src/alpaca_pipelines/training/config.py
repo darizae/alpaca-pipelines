@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class SpectrogramSpec(BaseModel):
@@ -92,9 +92,11 @@ class TrainingRunSpec(BaseModel):
     The backend or CLI constructs this, the executor consumes it.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     dataset_name: str
     run_name: str = ""
-    sequence_length: int = 128
+    sequence_length_ms: int = 400
     spectrogram: SpectrogramSpec = Field(default_factory=SpectrogramSpec)
     normalization: NormalizationSpec = Field(default_factory=NormalizationSpec)
     augmentation: AugmentationSpec = Field(default_factory=AugmentationSpec)
