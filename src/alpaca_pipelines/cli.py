@@ -466,7 +466,11 @@ def _cmd_dataset_prepare_review(args: argparse.Namespace) -> None:
 def _cmd_dataset_apply_review(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
-        payload = api.start_apply_review(args.dataset_name, args.review_table)
+        payload = api.start_apply_review(
+            args.dataset_name,
+            args.target_review_table,
+            args.noise_review_table,
+        )
     except Exception as exc:
         _exit_with_error(exc)
     _emit_json(payload)
@@ -666,7 +670,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     dataset_apply_parser = subparsers.add_parser("dataset-apply-review")
     dataset_apply_parser.add_argument("--dataset-name", required=True)
-    dataset_apply_parser.add_argument("--review-table", required=True)
+    dataset_apply_parser.add_argument("--target-review-table", required=True)
+    dataset_apply_parser.add_argument("--noise-review-table", required=True)
     dataset_apply_parser.add_argument("--json", action="store_true")
 
     dataset_job_parser = subparsers.add_parser("dataset-job")

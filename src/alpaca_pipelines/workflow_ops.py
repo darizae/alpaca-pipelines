@@ -27,7 +27,6 @@ from alpaca_pipelines.collections.workflows import (
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import WorkflowOperation
 from alpaca_pipelines.datasets.config import StrategyConfig
-from alpaca_pipelines.datasets.manifest import load_manifest
 from alpaca_pipelines.datasets.workflows import (
     ReviewApplyResult,
     ReviewPrepResult,
@@ -502,18 +501,25 @@ class WorkflowOperationManager:
             dataset_name = str(spec["dataset_name"])
             dataset_dir = self.environment.resolve_dataset_dir(dataset_name)
             review_result: ReviewPrepResult = prepare_review(dataset_dir)
-            manifest = load_manifest(dataset_dir)
             return {
                 "dataset_name": dataset_name,
-                "n_snippets": manifest.meta.n_snippets,
-                "concat_wav_hpc_path": str(review_result.concat_wav_path),
-                "selection_table_hpc_path": str(review_result.selection_table_path),
+                "n_target_snippets": review_result.n_target_snippets,
+                "n_noise_snippets": review_result.n_noise_snippets,
+                "target_concat_wav_hpc_path": str(review_result.target_concat_wav_path),
+                "noise_concat_wav_hpc_path": str(review_result.noise_concat_wav_path),
+                "target_selection_table_hpc_path": str(review_result.target_selection_table_path),
+                "noise_selection_table_hpc_path": str(review_result.noise_selection_table_path),
             }
         if operation.kind == "apply_review":
             dataset_name = str(spec["dataset_name"])
-            review_table_path = Path(str(spec["review_table_path"]))
+            target_review_table_path = Path(str(spec["target_review_table_path"]))
+            noise_review_table_path = Path(str(spec["noise_review_table_path"]))
             dataset_dir = self.environment.resolve_dataset_dir(dataset_name)
-            apply_result: ReviewApplyResult = apply_review(dataset_dir, review_table_path)
+            apply_result: ReviewApplyResult = apply_review(
+                dataset_dir,
+                target_review_table_path,
+                noise_review_table_path,
+            )
             return {
                 "n_corrections": apply_result.n_corrections,
                 "n_discarded": apply_result.n_discarded,

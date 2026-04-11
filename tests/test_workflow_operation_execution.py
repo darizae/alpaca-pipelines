@@ -520,13 +520,13 @@ def test_dataset_prepare_review_operation_completes(
     monkeypatch.setattr(
         "alpaca_pipelines.workflow_ops.prepare_review",
         lambda path: SimpleNamespace(
-            concat_wav_path=path / "review" / "review.wav",
-            selection_table_path=path / "review" / "review.Table.1.selections.txt",
+            n_target_snippets=7,
+            n_noise_snippets=5,
+            target_concat_wav_path=path / "review" / "review_target_concat.wav",
+            noise_concat_wav_path=path / "review" / "review_noise_concat.wav",
+            target_selection_table_path=path / "review" / "review_target_selection_table.txt",
+            noise_selection_table_path=path / "review" / "review_noise_selection_table.txt",
         ),
-    )
-    monkeypatch.setattr(
-        "alpaca_pipelines.workflow_ops.load_manifest",
-        lambda path: SimpleNamespace(meta=SimpleNamespace(n_snippets=12)),
     )
 
     operation = api.start_prepare_review("dataset-a")
@@ -535,7 +535,8 @@ def test_dataset_prepare_review_operation_completes(
     persisted = read_json(Path(operation["job_dir"]) / "operation.json")
     assert persisted["status"] == "completed"
     assert persisted["result_summary"]["dataset_name"] == "dataset-a"
-    assert persisted["result_summary"]["n_snippets"] == 12
+    assert persisted["result_summary"]["n_target_snippets"] == 7
+    assert persisted["result_summary"]["n_noise_snippets"] == 5
 
 
 def test_dataset_apply_review_operation_completes(
@@ -546,18 +547,24 @@ def test_dataset_apply_review_operation_completes(
     _disable_spawn(monkeypatch)
     dataset_dir = api.environment.datasets_root / "dataset-a"
     dataset_dir.mkdir()
-    review_table_path = tmp_path / "review.txt"
-    review_table_path.write_text("uid\tSound_type\n", encoding="utf-8")
+    target_review_table_path = tmp_path / "target_review.txt"
+    noise_review_table_path = tmp_path / "noise_review.txt"
+    target_review_table_path.write_text("uid\tSound_type\treview_label\n", encoding="utf-8")
+    noise_review_table_path.write_text("uid\tSound_type\treview_label\n", encoding="utf-8")
     monkeypatch.setattr(
         "alpaca_pipelines.workflow_ops.apply_review",
-        lambda dataset_dir, review_table_path: SimpleNamespace(
+        lambda dataset_dir, target_review_table_path, noise_review_table_path: SimpleNamespace(
             n_corrections=3,
             n_discarded=1,
             updated_manifest=SimpleNamespace(meta=SimpleNamespace(n_target=10, n_noise=8)),
         ),
     )
 
-    operation = api.start_apply_review("dataset-a", str(review_table_path))
+    operation = api.start_apply_review(
+        "dataset-a",
+        str(target_review_table_path),
+        str(noise_review_table_path),
+    )
     api.execute_workflow_operation(operation["job_dir"])
 
     persisted = read_json(Path(operation["job_dir"]) / "operation.json")
