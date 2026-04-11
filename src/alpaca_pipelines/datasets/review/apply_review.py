@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import io
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 
 import pandas as pd
 
-from alpaca_pipelines.datasets.contracts import VALID_REVIEW_ANNOTATIONS, Manifest, SnippetEntry
+from alpaca_pipelines.datasets.contracts import Manifest, SnippetEntry
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.io_utils import write_json
 from alpaca_pipelines.datasets.paths import CORRECTIONS_APPLIED_FILENAME, REVIEW_DIR, SNIPPETS_DIR
+
+ReviewAnnotation = Literal["target", "noise", "discard"]
 
 
 def _validate_reclassification(snippet: SnippetEntry, new_classification: str) -> None:
@@ -53,35 +55,36 @@ def apply_review_table(
     noise_review_table_path: Path,
     fs: FileSystem = _DEFAULT_FS,
 ) -> tuple[Manifest, int, int]:
-    target_review_table = _load_review_table(
+    target_snippets = _sorted_snippets_by_class(manifest, "target")
+    noise_snippets = _sorted_snippets_by_class(manifest, "noise")
+
+    target_labels = _parse_review_labels(
         review_table_path=target_review_table_path,
-        expected_sound_type="target",
+        class_snippets=target_snippets,
         fs=fs,
     )
-    noise_review_table = _load_review_table(
+    noise_labels = _parse_review_labels(
         review_table_path=noise_review_table_path,
-        expected_sound_type="noise",
+        class_snippets=noise_snippets,
         fs=fs,
     )
-    review_table = pd.concat([target_review_table, noise_review_table], ignore_index=True)
 
-    manifest_uids = {s.uid for s in manifest.snippets}
-    table_uids: list[int] = [int(row["uid"]) for _, row in review_table.iterrows()]
-
-    uid_counts = Counter(table_uids)
-    duplicates = {uid for uid, count in uid_counts.items() if count > 1}
-    if duplicates:
-        raise ValueError(f"Review table contains duplicate UIDs: {sorted(duplicates)}")
-
-    table_uid_set = set(table_uids)
-    missing_from_table = manifest_uids - table_uid_set
-    if missing_from_table:
+    overlap = set(target_labels) & set(noise_labels)
+    if overlap:
         raise ValueError(
-            f"Review table is incomplete: {len(missing_from_table)} manifest UIDs missing. "
-            f"First 10: {sorted(missing_from_table)[:10]}"
+            "Review tables map some snippets twice across target/noise uploads. "
+            f"First 10 UIDs: {sorted(overlap)[:10]}"
         )
 
-    unknown_uids = table_uid_set - manifest_uids
+    label_by_uid: dict[int, ReviewAnnotation] = {**target_labels, **noise_labels}
+    manifest_uids = {snippet.uid for snippet in manifest.snippets}
+    missing_from_tables = manifest_uids - set(label_by_uid)
+    if missing_from_tables:
+        raise ValueError(
+            f"Review table is incomplete: {len(missing_from_tables)} manifest UIDs missing. "
+            f"First 10: {sorted(missing_from_tables)[:10]}"
+        )
+    unknown_uids = set(label_by_uid) - manifest_uids
     if unknown_uids:
         raise ValueError(f"Review table references unknown UIDs: {sorted(unknown_uids)[:10]}")
 
@@ -91,27 +94,8 @@ def apply_review_table(
     updated_snippets: dict[int, SnippetEntry] = {}
     snippets_dir = dataset_dir / SNIPPETS_DIR
 
-    for _, row in review_table.iterrows():
-        uid = int(row["uid"])
-        annotation = str(row["review_label"]).strip()
-
-        if annotation not in VALID_REVIEW_ANNOTATIONS:
-            raise ValueError(
-                f"Unknown review annotation '{annotation}' for uid={uid}. "
-                f"Valid values: {sorted(VALID_REVIEW_ANNOTATIONS)}"
-            )
-
+    for uid, annotation in label_by_uid.items():
         snippet = uid_to_snippet[uid]
-        sound_type = str(row["Sound_type"]).strip()
-        if sound_type != snippet.classification:
-            raise ValueError(
-                "Review row for uid={} has Sound_type {!r}, expected {!r} from manifest".format(
-                    uid,
-                    sound_type,
-                    snippet.classification,
-                )
-            )
-
         if annotation == "discard":
             discarded_uids.add(uid)
             corrections.append(
@@ -208,30 +192,138 @@ def apply_review_table(
     return updated_manifest, n_reclassified, n_discarded
 
 
-def _load_review_table(
+def _sorted_snippets_by_class(
+    manifest: Manifest,
+    classification: Literal["target", "noise"],
+) -> list[SnippetEntry]:
+    return sorted(
+        [snippet for snippet in manifest.snippets if snippet.classification == classification],
+        key=lambda snippet: (snippet.collection, snippet.uid),
+    )
+
+
+def _parse_review_labels(
     *,
     review_table_path: Path,
-    expected_sound_type: str,
+    class_snippets: list[SnippetEntry],
     fs: FileSystem,
-) -> pd.DataFrame:
+) -> dict[int, ReviewAnnotation]:
     content = fs.read_text(review_table_path)
     review_table = pd.read_csv(io.StringIO(content), sep="\t")
-    required_columns = {"uid", "Sound_type", "review_label"}
-    missing_columns = required_columns - set(review_table.columns)
-    if missing_columns:
+    columns = set(review_table.columns)
+    has_uid = "uid" in columns
+    has_selection = "Selection" in columns
+    if not has_uid and not has_selection:
         raise ValueError(
-            f"Review table {review_table_path} missing columns: {sorted(missing_columns)}"
+            f"Review table {review_table_path} must include either 'uid' or 'Selection'"
+        )
+    has_review_label = "review_label" in columns
+    has_sound_type = "Sound_type" in columns
+    if not has_review_label and not has_sound_type:
+        raise ValueError(
+            f"Review table {review_table_path} must include either 'review_label' or 'Sound_type'"
         )
 
-    for _, row in review_table.iterrows():
-        sound_type = str(row["Sound_type"]).strip()
-        if sound_type != expected_sound_type:
+    if not class_snippets:
+        if len(review_table.index) == 0:
+            return {}
+        raise ValueError(
+            f"Review table {review_table_path} contains rows, but this class has no snippets"
+        )
+
+    selection_to_uid = {index + 1: snippet.uid for index, snippet in enumerate(class_snippets)}
+    allowed_uids = set(selection_to_uid.values())
+    parsed: dict[int, ReviewAnnotation] = {}
+
+    for row_number, (_, row) in enumerate(review_table.iterrows(), start=2):
+        uid_value = _cell_text(row, "uid") if has_uid else ""
+        selection_value = _cell_text(row, "Selection") if has_selection else ""
+        if uid_value:
+            uid = _parse_int(uid_value, field_name="uid", row_number=row_number)
+        elif selection_value:
+            selection = _parse_int(
+                selection_value,
+                field_name="Selection",
+                row_number=row_number,
+            )
+            resolved_uid = selection_to_uid.get(selection)
+            if resolved_uid is None:
+                raise ValueError(
+                    f"Review table row {row_number} has Selection {selection} outside valid range "
+                    f"1..{len(selection_to_uid)}"
+                )
+            uid = resolved_uid
+        else:
+            raise ValueError(f"Review table row {row_number} is missing both uid and Selection")
+
+        if uid not in allowed_uids:
             raise ValueError(
-                "Review table {} contains Sound_type {!r}; expected {!r} only.".format(
+                "Review table {} references uid {} not present in this class subset".format(
                     review_table_path,
-                    sound_type,
-                    expected_sound_type,
+                    uid,
                 )
             )
 
-    return review_table
+        raw_label = _cell_text(row, "review_label") if has_review_label else ""
+        if raw_label == "":
+            raw_label = _cell_text(row, "Sound_type")
+        annotation = _normalize_review_label(
+            raw_label,
+            row_number=row_number,
+        )
+
+        existing = parsed.get(uid)
+        if existing is not None and existing != annotation:
+            raise ValueError(
+                "Review table contains conflicting labels for uid {}: {} vs {}".format(
+                    uid,
+                    existing,
+                    annotation,
+                )
+            )
+        parsed[uid] = annotation
+
+    missing = allowed_uids - set(parsed)
+    if missing:
+        raise ValueError(
+            "Review table {} is incomplete: {} snippet rows are missing. First 10 UIDs: {}".format(
+                review_table_path,
+                len(missing),
+                sorted(missing)[:10],
+            )
+        )
+    return parsed
+
+
+def _cell_text(row: pd.Series, column: str) -> str:
+    value = row.get(column)
+    if value is None:
+        return ""
+    if isinstance(value, float) and pd.isna(value):
+        return ""
+    return str(value).strip()
+
+
+def _parse_int(value: str, *, field_name: str, row_number: int) -> int:
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(
+            f"Review table row {row_number} has invalid {field_name}: {value!r}"
+        ) from exc
+
+
+def _normalize_review_label(value: str, *, row_number: int) -> ReviewAnnotation:
+    normalized = value.strip().lower()
+    if normalized in {"1", "target"}:
+        return "target"
+    if normalized in {"0", "noise"}:
+        return "noise"
+    if normalized == "discard":
+        return "discard"
+    if normalized == "":
+        raise ValueError(f"Review table row {row_number} has an empty label")
+    raise ValueError(
+        f"Review table row {row_number} has unknown label {value!r}. "
+        "Valid values: 1, 0, target, noise, discard"
+    )
