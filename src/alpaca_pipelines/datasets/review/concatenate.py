@@ -31,6 +31,18 @@ _REVIEW_SELECTION_TABLE_FILENAMES: dict[ReviewClass, str] = {
     "target": REVIEW_TARGET_SELECTION_TABLE_FILENAME,
     "noise": REVIEW_NOISE_SELECTION_TABLE_FILENAME,
 }
+_REVIEW_SELECTION_COLUMNS: list[str] = [
+    "Selection",
+    "View",
+    "Channel",
+    "Begin Time (s)",
+    "End Time (s)",
+    "Low Freq (Hz)",
+    "High Freq (Hz)",
+    "Sound_type",
+    "review_label",
+    "uid",
+]
 
 
 @dataclass(frozen=True)
@@ -84,12 +96,12 @@ def prepare_review_artifacts(
                     "Low Freq (Hz)": freq_low_hz,
                     "High Freq (Hz)": freq_high_hz,
                     "Sound_type": snippet.classification,
-                    "review_label": snippet.classification,
+                    "review_label": "1" if snippet.classification == "target" else "0",
                     "uid": snippet.uid,
                 }
             )
 
-        selection_table = pd.DataFrame(selection_rows)
+        selection_table = pd.DataFrame(selection_rows, columns=_REVIEW_SELECTION_COLUMNS)
         buffer = io.StringIO()
         selection_table.to_csv(buffer, sep="\t", index=False)
         selection_table_path = review_dir / _REVIEW_SELECTION_TABLE_FILENAMES[review_class]
