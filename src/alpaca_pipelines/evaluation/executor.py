@@ -42,6 +42,21 @@ from bioacoustics_dl_toolbox.metrics.core import (
 logger = logging.getLogger(__name__)
 
 
+def _sequence_length_ms_to_steps(
+    sequence_length_ms: int,
+    sample_rate: int,
+    hop_length: int,
+) -> int:
+    if sequence_length_ms <= 0:
+        raise ValueError("sequence_length_ms must be positive")
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    if hop_length <= 0:
+        raise ValueError("hop_length must be positive")
+    ms_per_step = (1000.0 * hop_length) / sample_rate
+    return max(1, int(round(sequence_length_ms / ms_per_step)))
+
+
 def _resolve_target_index(class_to_index: dict[str, int]) -> int:
     """Determine the target class index from the saved class mapping.
 
@@ -87,7 +102,7 @@ def _evaluate_dataset_split(
     split_name: str,
     spec_config: SpectrogramConfig,
     norm_config: NormalizationConfig,
-    sequence_length: int,
+    sequence_length_steps: int,
     batch_size: int,
     num_workers: int,
     device: torch.device,
@@ -107,7 +122,7 @@ def _evaluate_dataset_split(
         norm_config=norm_config,
         aug_config=aug_config,
         classes=dataset_handle.classes,
-        sequence_length=sequence_length,
+        sequence_length=sequence_length_steps,
         class_to_index=dataset_handle.class_to_index,
         dataset_name=split_name,
     )
@@ -296,8 +311,17 @@ def execute_evaluation(
             ref_level_db=spec_config.ref_level_db,
         )
 
-        sequence_length = spec.sequence_length
-        evaluation_logger.info("Sequence length: {}".format(sequence_length))
+        sequence_length_steps = _sequence_length_ms_to_steps(
+            spec.sequence_length_ms,
+            spec_config.sample_rate,
+            spec_config.hop_length,
+        )
+        evaluation_logger.info(
+            "Sequence length: {} ms ({} spectrogram steps)".format(
+                spec.sequence_length_ms,
+                sequence_length_steps,
+            )
+        )
 
         evaluation_logger.info("Evaluating on {} split".format(spec.split))
         results = _evaluate_dataset_split(
@@ -306,7 +330,7 @@ def execute_evaluation(
             split_name=spec.split,
             spec_config=spec_config,
             norm_config=norm_config,
-            sequence_length=sequence_length,
+            sequence_length_steps=sequence_length_steps,
             batch_size=spec.batch_size,
             num_workers=spec.num_workers,
             device=device,
@@ -319,7 +343,7 @@ def execute_evaluation(
             "run_id": run_state.run_id,
             "model_path": model_path,
             "dataset_name": spec.dataset_name,
-            "sequence_length": sequence_length,
+            "sequence_length_ms": spec.sequence_length_ms,
             "results": results,
         }
         write_json(evaluation_dir / "evaluation_report.json", evaluation_report)

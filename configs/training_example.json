@@ -1,7 +1,7 @@
 {
   "dataset_name": "clipwise_balanced_nph_2",
   "run_name": "resnet18_clipwise_balanced_nph_2_seq400_minmax",
-  "sequence_length": 400,
+  "sequence_length_ms": 400,
   "spectrogram": {
     "sample_rate": 48000,
     "preemphasis": 0.98,

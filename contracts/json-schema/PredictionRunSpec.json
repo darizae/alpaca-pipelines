@@ -103,12 +103,12 @@
       "type": "array"
     },
     "sequence_length_ms": {
-      "default": 1280,
+      "default": 400,
       "title": "Sequence Length Ms",
       "type": "integer"
     },
     "hop_ms": {
-      "default": 640,
+      "default": 50,
       "title": "Hop Ms",
       "type": "integer"
     },

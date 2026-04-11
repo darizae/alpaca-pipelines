@@ -55,8 +55,8 @@ class PredictionRunSpec(BaseModel):
     collection_names: list[str] = Field(default_factory=list)
     source_category_dirs: list[str] = Field(default_factory=list)
 
-    sequence_length_ms: int = 1280
-    hop_ms: int = 640
+    sequence_length_ms: int = 400
+    hop_ms: int = 50
     batch_size: int = 16
     num_workers: int = 4
     use_cuda: bool = True

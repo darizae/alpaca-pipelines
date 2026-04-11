@@ -218,13 +218,28 @@ def _build_training_config(spec: TrainingRunSpec) -> TrainingConfig:
     )
 
 
+def _sequence_length_ms_to_steps(
+    sequence_length_ms: int,
+    sample_rate: int,
+    hop_length: int,
+) -> int:
+    if sequence_length_ms <= 0:
+        raise ValueError("sequence_length_ms must be positive")
+    if sample_rate <= 0:
+        raise ValueError("sample_rate must be positive")
+    if hop_length <= 0:
+        raise ValueError("hop_length must be positive")
+    ms_per_step = (1000.0 * hop_length) / sample_rate
+    return max(1, int(round(sequence_length_ms / ms_per_step)))
+
+
 def _create_dataset(
     file_names: list[str],
     dataset_handle: DatasetHandle,
     spec_config: SpectrogramConfig,
     norm_config: NormalizationConfig,
     aug_config: AugmentationConfig,
-    sequence_length: int,
+    sequence_length_steps: int,
     positive_class: str,
     cache_dir: str | None,
     dataset_name: str,
@@ -236,7 +251,7 @@ def _create_dataset(
         norm_config=norm_config,
         aug_config=aug_config,
         classes=dataset_handle.classes,
-        sequence_length=sequence_length,
+        sequence_length=sequence_length_steps,
         class_to_index=dataset_handle.class_to_index,
         positive_class=positive_class,
         cache_dir=cache_dir,
@@ -288,6 +303,17 @@ def execute_training(
                 dataset_handle.split_file_count("test"),
             )
         )
+        sequence_length_steps = _sequence_length_ms_to_steps(
+            spec.sequence_length_ms,
+            spec_config.sample_rate,
+            spec_config.hop_length,
+        )
+        training_logger.info(
+            "Sequence length: {} ms ({} spectrogram steps)".format(
+                spec.sequence_length_ms,
+                sequence_length_steps,
+            )
+        )
 
         train_dataset = _create_dataset(
             file_names=dataset_handle.splits.train,
@@ -295,7 +321,7 @@ def execute_training(
             spec_config=spec_config,
             norm_config=norm_config,
             aug_config=aug_config_train,
-            sequence_length=spec.sequence_length,
+            sequence_length_steps=sequence_length_steps,
             positive_class=spec.positive_class,
             cache_dir=spec.cache_dir,
             dataset_name="train",
@@ -307,7 +333,7 @@ def execute_training(
             spec_config=spec_config,
             norm_config=norm_config,
             aug_config=aug_config_eval,
-            sequence_length=spec.sequence_length,
+            sequence_length_steps=sequence_length_steps,
             positive_class=spec.positive_class,
             cache_dir=spec.cache_dir,
             dataset_name="val",
@@ -319,7 +345,7 @@ def execute_training(
             spec_config=spec_config,
             norm_config=norm_config,
             aug_config=aug_config_eval,
-            sequence_length=spec.sequence_length,
+            sequence_length_steps=sequence_length_steps,
             positive_class=spec.positive_class,
             cache_dir=spec.cache_dir,
             dataset_name="test",

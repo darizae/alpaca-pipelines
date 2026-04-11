@@ -68,7 +68,7 @@ def test_create_json_outputs_parseable_payload_for_each_run_type(tmp_path: Path)
         elif run_type == "rf_training":
             write_json(config_path, {"dataset_name": "dataset-a"})
         elif run_type == "evaluation":
-            write_json(config_path, {"dataset_name": "dataset-a", "sequence_length": 128})
+            write_json(config_path, {"dataset_name": "dataset-a", "sequence_length_ms": 400})
         else:
             model_path = tmp_path / "model.pt"
             model_path.write_bytes(b"")
@@ -111,6 +111,35 @@ def test_create_json_outputs_parseable_payload_for_each_run_type(tmp_path: Path)
         assert payload["run_type"] == run_type
         assert payload["status"] == "created"
         assert payload["run_id"]
+
+
+def test_create_training_with_legacy_sequence_length_fails_validation(
+    tmp_path: Path,
+) -> None:
+    repo_root, env = _build_cli_env(tmp_path)
+    config_path = tmp_path / "training_legacy.json"
+    write_json(config_path, {"dataset_name": "dataset-a", "sequence_length": 400})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "alpaca_pipelines.cli",
+            "create",
+            "training",
+            "--config",
+            str(config_path),
+            "--json",
+        ],
+        cwd=repo_root,
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    assert "extra_forbidden" in result.stderr
 
 
 def test_generate_slurm_json_does_not_mutate_lifecycle_state(tmp_path: Path) -> None:
