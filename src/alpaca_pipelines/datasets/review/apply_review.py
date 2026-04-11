@@ -49,16 +49,21 @@ def _reclassified_filename(snippet: SnippetEntry, new_classification: str) -> st
 def apply_review_table(
     dataset_dir: Path,
     manifest: Manifest,
-    review_table_path: Path,
+    target_review_table_path: Path,
+    noise_review_table_path: Path,
     fs: FileSystem = _DEFAULT_FS,
 ) -> tuple[Manifest, int, int]:
-    content = fs.read_text(review_table_path)
-    review_table = pd.read_csv(io.StringIO(content), sep="\t")
-
-    required_columns = {"uid", "Sound_type"}
-    missing_columns = required_columns - set(review_table.columns)
-    if missing_columns:
-        raise ValueError(f"Review table missing columns: {missing_columns}")
+    target_review_table = _load_review_table(
+        review_table_path=target_review_table_path,
+        expected_sound_type="target",
+        fs=fs,
+    )
+    noise_review_table = _load_review_table(
+        review_table_path=noise_review_table_path,
+        expected_sound_type="noise",
+        fs=fs,
+    )
+    review_table = pd.concat([target_review_table, noise_review_table], ignore_index=True)
 
     manifest_uids = {s.uid for s in manifest.snippets}
     table_uids: list[int] = [int(row["uid"]) for _, row in review_table.iterrows()]
@@ -88,7 +93,7 @@ def apply_review_table(
 
     for _, row in review_table.iterrows():
         uid = int(row["uid"])
-        annotation = str(row["Sound_type"]).strip()
+        annotation = str(row["review_label"]).strip()
 
         if annotation not in VALID_REVIEW_ANNOTATIONS:
             raise ValueError(
@@ -97,6 +102,15 @@ def apply_review_table(
             )
 
         snippet = uid_to_snippet[uid]
+        sound_type = str(row["Sound_type"]).strip()
+        if sound_type != snippet.classification:
+            raise ValueError(
+                "Review row for uid={} has Sound_type {!r}, expected {!r} from manifest".format(
+                    uid,
+                    sound_type,
+                    snippet.classification,
+                )
+            )
 
         if annotation == "discard":
             discarded_uids.add(uid)
@@ -182,7 +196,8 @@ def apply_review_table(
 
     corrections_log = {
         "applied_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "review_table_path": str(review_table_path),
+        "target_review_table_path": str(target_review_table_path),
+        "noise_review_table_path": str(noise_review_table_path),
         "n_reclassified": n_reclassified,
         "n_discarded": n_discarded,
         "corrections": corrections,
@@ -191,3 +206,32 @@ def apply_review_table(
     write_json(corrections_path, corrections_log, fs)
 
     return updated_manifest, n_reclassified, n_discarded
+
+
+def _load_review_table(
+    *,
+    review_table_path: Path,
+    expected_sound_type: str,
+    fs: FileSystem,
+) -> pd.DataFrame:
+    content = fs.read_text(review_table_path)
+    review_table = pd.read_csv(io.StringIO(content), sep="\t")
+    required_columns = {"uid", "Sound_type", "review_label"}
+    missing_columns = required_columns - set(review_table.columns)
+    if missing_columns:
+        raise ValueError(
+            f"Review table {review_table_path} missing columns: {sorted(missing_columns)}"
+        )
+
+    for _, row in review_table.iterrows():
+        sound_type = str(row["Sound_type"]).strip()
+        if sound_type != expected_sound_type:
+            raise ValueError(
+                "Review table {} contains Sound_type {!r}; expected {!r} only.".format(
+                    review_table_path,
+                    sound_type,
+                    expected_sound_type,
+                )
+            )
+
+    return review_table

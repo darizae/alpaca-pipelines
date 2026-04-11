@@ -178,6 +178,57 @@ def test_standardizer_import_json_writes_single_json_document(
     assert payload["workflow"] == "standardizer"
 
 
+def test_dataset_apply_review_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        start_apply_review=lambda dataset_name, target_review_table_path, noise_review_table_path: {
+            "job_id": "33333333-1111-1111-1111-111111111111",
+            "workflow": "dataset_builder",
+            "kind": "apply_review",
+            "status": "pending",
+            "created_at": "2026-03-12T01:00:00Z",
+            "started_at": "2026-03-12T01:00:01Z",
+            "finished_at": None,
+            "job_dir": (
+                "/runs/operations/dataset_builder/apply_review/33333333-1111-1111-1111-111111111111"
+            ),
+            "metadata": {"dataset_name": dataset_name},
+            "spec": {
+                "target_review_table_path": target_review_table_path,
+                "noise_review_table_path": noise_review_table_path,
+            },
+        }
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "dataset-apply-review",
+            "--dataset-name",
+            "dataset-a",
+            "--target-review-table",
+            "/tmp/target.txt",
+            "--noise-review-table",
+            "/tmp/noise.txt",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["kind"] == "apply_review"
+    assert payload["metadata"]["dataset_name"] == "dataset-a"
+    assert payload["spec"]["target_review_table_path"] == "/tmp/target.txt"
+    assert payload["spec"]["noise_review_table_path"] == "/tmp/noise.txt"
+
+
 def test_delete_failed_operation_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

@@ -18,8 +18,6 @@ from alpaca_pipelines.datasets.manifest import (
 )
 from alpaca_pipelines.datasets.mining.mine_negatives import mine_negatives_for_positives
 from alpaca_pipelines.datasets.paths import (
-    REVIEW_CONCAT_FILENAME,
-    REVIEW_DIR,
     SNIPPETS_DIR,
     SPLITS_DIR,
     ensure_dataset_dirs,
@@ -46,8 +44,12 @@ class BuildResult:
 @dataclass(frozen=True)
 class ReviewPrepResult:
     dataset_dir: Path
-    selection_table_path: Path
-    concat_wav_path: Path
+    target_selection_table_path: Path
+    noise_selection_table_path: Path
+    target_concat_wav_path: Path
+    noise_concat_wav_path: Path
+    n_target_snippets: int
+    n_noise_snippets: int
 
 
 @dataclass(frozen=True)
@@ -199,7 +201,7 @@ def prepare_review(dataset_dir: Path, fs: FileSystem = _DEFAULT_FS) -> ReviewPre
     freq_low_hz = int(review_config.get("freq_low_hz", 0))
     freq_high_hz = int(review_config.get("freq_high_hz", 4000))
 
-    table_path = prepare_review_artifacts(
+    artifacts = prepare_review_artifacts(
         dataset_dir=dataset_dir,
         manifest=manifest,
         gap_seconds=gap_seconds,
@@ -208,18 +210,21 @@ def prepare_review(dataset_dir: Path, fs: FileSystem = _DEFAULT_FS) -> ReviewPre
         fs=fs,
     )
 
-    concat_path = dataset_dir / REVIEW_DIR / REVIEW_CONCAT_FILENAME
-
     return ReviewPrepResult(
         dataset_dir=dataset_dir,
-        selection_table_path=table_path,
-        concat_wav_path=concat_path,
+        target_selection_table_path=artifacts["target"].selection_table_path,
+        noise_selection_table_path=artifacts["noise"].selection_table_path,
+        target_concat_wav_path=artifacts["target"].concat_wav_path,
+        noise_concat_wav_path=artifacts["noise"].concat_wav_path,
+        n_target_snippets=artifacts["target"].n_snippets,
+        n_noise_snippets=artifacts["noise"].n_snippets,
     )
 
 
 def apply_review(
     dataset_dir: Path,
-    review_table_path: Path,
+    target_review_table_path: Path,
+    noise_review_table_path: Path,
     fs: FileSystem = _DEFAULT_FS,
 ) -> ReviewApplyResult:
     manifest = load_manifest(dataset_dir, fs)
@@ -227,7 +232,8 @@ def apply_review(
     updated_manifest, n_reclassified, n_discarded = apply_review_table(
         dataset_dir,
         manifest,
-        review_table_path,
+        target_review_table_path,
+        noise_review_table_path,
         fs,
     )
 

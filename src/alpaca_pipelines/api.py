@@ -374,14 +374,20 @@ class PipelineAPI:
         )
         return record.model_dump()
 
-    def start_apply_review(self, dataset_name: str, review_table_path: str) -> dict[str, Any]:
+    def start_apply_review(
+        self,
+        dataset_name: str,
+        target_review_table_path: str,
+        noise_review_table_path: str,
+    ) -> dict[str, Any]:
         self._ensure_no_active_review(dataset_name)
         record = self.workflow_ops.start(
             workflow="dataset_builder",
             kind="apply_review",
             spec={
                 "dataset_name": dataset_name,
-                "review_table_path": review_table_path,
+                "target_review_table_path": target_review_table_path,
+                "noise_review_table_path": noise_review_table_path,
             },
             metadata={"dataset_name": dataset_name},
         )
