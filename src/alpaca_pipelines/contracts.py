@@ -118,6 +118,14 @@ class DatasetManifest(BaseModel):
 
 RunType = Literal["training", "prediction", "evaluation", "rf_training"]
 RunStatus = Literal["created", "submitted", "running", "completed", "failed", "cancelled"]
+PredictionProgressStage = Literal[
+    "initializing",
+    "resolving_inputs",
+    "predicting",
+    "rf_filtering",
+    "writing_summary",
+    "completed",
+]
 WorkflowName = Literal["standardizer", "dataset_builder"]
 WorkflowOperationKind = Literal[
     "import",
@@ -152,6 +160,19 @@ class RunOutputs(BaseModel):
     rf_filtered: bool = False
 
 
+class PredictionProgress(BaseModel):
+    """Structured progress snapshot for prediction runs."""
+
+    stage: PredictionProgressStage
+    files_total: int | None = None
+    files_completed: int | None = None
+    current_file: str | None = None
+    current_file_windows_total: int | None = None
+    current_file_windows_completed: int | None = None
+    detections_so_far: int | None = None
+    updated_at: str | None = None
+
+
 class RunProgress(BaseModel):
     """Optional progress tracking for long-running jobs."""
 
@@ -160,6 +181,7 @@ class RunProgress(BaseModel):
     current_phase: str | None = None
     best_metric_value: float | None = None
     best_metric_name: str | None = None
+    prediction: PredictionProgress | None = None
 
 
 class RunState(BaseModel):

@@ -289,8 +289,8 @@
       "type": "object"
     }
   },
-  "description": "Complete specification for a training run.\n\nThis is serialized into run_state.json and is immutable after creation.\nThe backend or CLI constructs this, the executor consumes it.",
   "additionalProperties": false,
+  "description": "Complete specification for a training run.\n\nThis is serialized into run_state.json and is immutable after creation.\nThe backend or CLI constructs this, the executor consumes it.",
   "properties": {
     "dataset_name": {
       "title": "Dataset Name",

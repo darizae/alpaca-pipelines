@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import torch
@@ -38,6 +40,11 @@ from bioacoustics_dl_toolbox.models.encoder import ResidualEncoder
 from bioacoustics_dl_toolbox.training.checkpoints import load_model
 
 logger = logging.getLogger(__name__)
+_PREDICTION_PROGRESS_EMIT_INTERVAL_SECONDS = 2.0
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 def _validate_class_to_index(class_to_index: dict[str, int]) -> None:
@@ -108,6 +115,7 @@ def _predict_tape(
     batch_size: int,
     num_workers: int,
     device: torch.device,
+    progress_callback: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Run sliding-window prediction over a single audio tape."""
     dataset = StridedAudioDataset(
@@ -125,6 +133,11 @@ def _predict_tape(
         num_workers=num_workers,
     )
 
+    total_windows = len(dataset)
+    windows_completed = 0
+    if progress_callback is not None:
+        progress_callback(windows_completed, total_windows)
+
     all_scores: list[np.ndarray] = []
     with torch.no_grad():
         for batch in loader:
@@ -132,6 +145,9 @@ def _predict_tape(
             output = model(batch)
             probabilities = nn.functional.softmax(output, dim=1)
             all_scores.append(probabilities.cpu().numpy())
+            windows_completed += int(probabilities.shape[0])
+            if progress_callback is not None:
+                progress_callback(min(windows_completed, total_windows), total_windows)
 
     if all_scores:
         scores_array = np.concatenate(all_scores, axis=0)
@@ -140,7 +156,7 @@ def _predict_tape(
 
     return {
         "audio_file": audio_file,
-        "n_windows": len(dataset),
+        "n_windows": total_windows,
         "hop_samples": hop_samples,
         "sequence_length_samples": sequence_length_samples,
         "sample_rate": spec_config.sample_rate,
@@ -212,8 +228,41 @@ def execute_prediction(
     run_dir = Path(run_state.run_dir)
 
     run_state = run_manager.mark_running(run_state.run_id)
+    last_progress_emit_monotonic: float | None = None
+    prediction_progress: dict[str, Any] = {
+        "stage": "initializing",
+        "files_total": None,
+        "files_completed": 0,
+        "current_file": None,
+        "current_file_windows_total": None,
+        "current_file_windows_completed": None,
+        "detections_so_far": 0,
+        "updated_at": _now_iso(),
+    }
+
+    def _emit_prediction_progress(*, force: bool = False, **updates: Any) -> None:
+        nonlocal last_progress_emit_monotonic, prediction_progress
+        prediction_progress = {
+            **prediction_progress,
+            **updates,
+            "updated_at": _now_iso(),
+        }
+        now = time.monotonic()
+        if (
+            not force
+            and last_progress_emit_monotonic is not None
+            and now - last_progress_emit_monotonic < _PREDICTION_PROGRESS_EMIT_INTERVAL_SECONDS
+        ):
+            return
+        run_manager.update_progress(
+            run_state.run_id,
+            current_phase=str(prediction_progress["stage"]),
+            prediction=prediction_progress,
+        )
+        last_progress_emit_monotonic = now
 
     try:
+        _emit_prediction_progress(force=True, stage="initializing")
         run_name = spec.run_name or run_state.run_id
         prediction_logger = create_logger(
             run_name,
@@ -239,6 +288,7 @@ def execute_prediction(
         sequence_length_samples = int(spec.sequence_length_ms / 1000.0 * spec_config.sample_rate)
         hop_samples = int(spec.hop_ms / 1000.0 * spec_config.sample_rate)
 
+        _emit_prediction_progress(force=True, stage="resolving_inputs")
         audio_files: list[str] = []
         if spec.mode == "tape":
             audio_files = resolve_tape_audio_files(
@@ -266,11 +316,34 @@ def execute_prediction(
 
         predictions_dir = run_dir / "outputs" / "predictions"
         all_results: list[dict[str, Any]] = []
+        total_detections = 0
+        _emit_prediction_progress(
+            force=True,
+            stage="predicting",
+            files_total=len(audio_files),
+            files_completed=0,
+            detections_so_far=0,
+        )
 
         for file_index, audio_file in enumerate(audio_files):
             prediction_logger.info(
                 "Predicting [{}/{}]: {}".format(file_index + 1, len(audio_files), audio_file)
             )
+            _emit_prediction_progress(
+                force=True,
+                stage="predicting",
+                current_file=audio_file,
+                current_file_windows_total=None,
+                current_file_windows_completed=0,
+            )
+
+            def _report_file_window_progress(completed: int, total: int) -> None:
+                _emit_prediction_progress(
+                    stage="predicting",
+                    current_file=audio_file,
+                    current_file_windows_completed=completed,
+                    current_file_windows_total=total,
+                )
 
             tape_result = _predict_tape(
                 model=model,
@@ -282,6 +355,7 @@ def execute_prediction(
                 batch_size=spec.batch_size,
                 num_workers=spec.num_workers,
                 device=device,
+                progress_callback=_report_file_window_progress,
             )
 
             detections = _generate_detections(
@@ -302,6 +376,7 @@ def execute_prediction(
                 else [0, 0],
             }
             all_results.append(file_result)
+            total_detections += len(detections)
 
             per_file_path = _prediction_output_path(predictions_dir, audio_file)
             if per_file_path.exists():
@@ -312,18 +387,38 @@ def execute_prediction(
                 )
             write_json(per_file_path, file_result)
 
-            run_manager.update_progress(
-                run_state.run_id,
-                current_phase="prediction",
-                current_epoch=file_index + 1,
-                total_epochs=len(audio_files),
+            _emit_prediction_progress(
+                force=True,
+                stage="predicting",
+                files_completed=file_index + 1,
+                current_file_windows_completed=file_result["n_windows"],
+                current_file_windows_total=file_result["n_windows"],
+                detections_so_far=total_detections,
             )
 
+        if spec.apply_rf_filter and spec.rf_model_path is not None:
+            _emit_prediction_progress(force=True, stage="rf_filtering")
+            prediction_logger.info("Applying RF filter (post-processing)")
+            from alpaca_pipelines.rf.executor import apply_rf_filter
+
+            apply_rf_filter(
+                predictions_dir=predictions_dir,
+                rf_model_path=spec.rf_model_path,
+                audio_files=audio_files,
+                prediction_logger=prediction_logger,
+            )
+
+            run_manager.update_outputs(
+                run_state.run_id,
+                rf_filtered=True,
+            )
+
+        _emit_prediction_progress(force=True, stage="writing_summary")
         summary = {
             "run_id": run_state.run_id,
             "model_path": spec.model_path,
             "n_files": len(audio_files),
-            "total_detections": sum(r["n_detections"] for r in all_results),
+            "total_detections": total_detections,
             "detection_threshold": spec.detection_threshold,
             "files": [
                 {
@@ -342,21 +437,16 @@ def execute_prediction(
             )
         )
 
-        if spec.apply_rf_filter and spec.rf_model_path is not None:
-            prediction_logger.info("Applying RF filter (post-processing)")
-            from alpaca_pipelines.rf.executor import apply_rf_filter
-
-            apply_rf_filter(
-                predictions_dir=predictions_dir,
-                rf_model_path=spec.rf_model_path,
-                audio_files=audio_files,
-                prediction_logger=prediction_logger,
-            )
-
-            run_manager.update_outputs(
-                run_state.run_id,
-                rf_filtered=True,
-            )
+        _emit_prediction_progress(
+            force=True,
+            stage="completed",
+            files_total=len(audio_files),
+            files_completed=len(audio_files),
+            current_file=None,
+            current_file_windows_total=None,
+            current_file_windows_completed=None,
+            detections_so_far=total_detections,
+        )
 
         run_state = run_manager.mark_completed(run_state.run_id)
         return run_state

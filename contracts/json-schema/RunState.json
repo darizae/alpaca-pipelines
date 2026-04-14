@@ -1,5 +1,111 @@
 {
   "$defs": {
+    "PredictionProgress": {
+      "description": "Structured progress snapshot for prediction runs.",
+      "properties": {
+        "stage": {
+          "enum": [
+            "initializing",
+            "resolving_inputs",
+            "predicting",
+            "rf_filtering",
+            "writing_summary",
+            "completed"
+          ],
+          "title": "Stage",
+          "type": "string"
+        },
+        "files_total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Files Total"
+        },
+        "files_completed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Files Completed"
+        },
+        "current_file": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current File"
+        },
+        "current_file_windows_total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current File Windows Total"
+        },
+        "current_file_windows_completed": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Current File Windows Completed"
+        },
+        "detections_so_far": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detections So Far"
+        },
+        "updated_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Updated At"
+        }
+      },
+      "required": [
+        "stage"
+      ],
+      "title": "PredictionProgress",
+      "type": "object"
+    },
     "RunOutputs": {
       "description": "Pointers to output artifacts produced by a run.\n\nDirectory pointers (``*_dir``) are set at run creation time.\nFile pointers are set by executors when the artifact is actually produced.",
       "properties": {
@@ -194,6 +300,17 @@
           ],
           "default": null,
           "title": "Best Metric Name"
+        },
+        "prediction": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PredictionProgress"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "RunProgress",
