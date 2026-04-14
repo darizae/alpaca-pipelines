@@ -1,6 +1,6 @@
 {
-  "description": "Complete specification for an evaluation run.",
   "additionalProperties": false,
+  "description": "Complete specification for an evaluation run.",
   "properties": {
     "prediction_run_id": {
       "anyOf": [
