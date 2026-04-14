@@ -25,6 +25,7 @@ from alpaca_pipelines.contracts import (
     RUN_STATE_FILENAME,
     SLURM_DIR,
     SUMMARIES_DIR,
+    PredictionProgress,
     RunOutputs,
     RunState,
     RunStatus,
@@ -199,6 +200,7 @@ class RunManager:
         current_phase: str | None = None,
         best_metric_value: float | None = None,
         best_metric_name: str | None = None,
+        prediction: PredictionProgress | dict[str, Any] | None = None,
     ) -> RunState:
         """Update progress tracking fields on a running job."""
         state = self.find_run(run_id)
@@ -213,6 +215,12 @@ class RunManager:
             progress_updates["best_metric_value"] = best_metric_value
         if best_metric_name is not None:
             progress_updates["best_metric_name"] = best_metric_name
+        if prediction is not None:
+            progress_updates["prediction"] = (
+                prediction
+                if isinstance(prediction, PredictionProgress)
+                else PredictionProgress.model_validate(prediction)
+            )
 
         updated_progress = state.progress.model_copy(update=progress_updates)
         updated = state.model_copy(update={"progress": updated_progress})
