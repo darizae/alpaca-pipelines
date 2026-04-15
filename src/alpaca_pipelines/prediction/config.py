@@ -78,6 +78,9 @@ class PredictionRunSpec(BaseModel):
 
     @model_validator(mode="after")
     def validate_mode_inputs(self) -> "PredictionRunSpec":
+        if self.apply_rf_filter and not self.rf_model_path:
+            raise ValueError("rf_model_path is required when apply_rf_filter is enabled")
+
         if self.mode == "dataset":
             if not self.dataset_name:
                 raise ValueError("dataset_name is required for dataset mode")
@@ -98,8 +101,6 @@ class PredictionRunSpec(BaseModel):
                 raise ValueError("collection_names must be empty for tape mode")
             if self.source_category_dirs:
                 raise ValueError("source_category_dirs must be empty for tape mode")
-            if self.apply_rf_filter and not self.rf_model_path:
-                raise ValueError("rf_model_path is required when apply_rf_filter is enabled")
             return self
 
         if not self.collection_names:
@@ -119,8 +120,6 @@ class PredictionRunSpec(BaseModel):
         for category_dir in self.source_category_dirs:
             if not _is_safe_path_segment(category_dir):
                 raise ValueError("source_category_dirs entries must be safe path segments")
-        if self.apply_rf_filter and not self.rf_model_path:
-            raise ValueError("rf_model_path is required when apply_rf_filter is enabled")
         return self
 
     def to_spec_dict(self) -> dict[str, Any]:

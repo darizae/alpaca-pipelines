@@ -109,10 +109,10 @@ Inference behavior:
 7. Score with `predict_proba`.
 8. Mark `rf_pass = rf_prob >= rf_threshold`.
 
-Backward compatibility rule:
+RF v1 compatibility rule:
 
-* If a detection payload already carries `cnn_logit_mean`, preserve it in the RF row only when the loaded model expects a `cnn_logit_mean` column.
-* New RF training runs do not include `cnn_logit_mean` by default. Do not invent or synthesize this feature for new models.
+* RF v1 does not support `cnn_logit_mean`.
+* Models requiring `cnn_logit_mean` are invalid for RF v1 inference.
 
 ### 5. Prediction artifact contract
 
