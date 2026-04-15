@@ -1,10 +1,4 @@
-"""
-RF training pipeline executor.
-
-Trains a RandomForestClassifier on dataset snippets using acoustic features
-computed by bioacoustics-dl-toolbox. Persists the model and a training report
-under the standard run directory scaffold.
-"""
+"""RF training pipeline executor."""
 
 from __future__ import annotations
 
@@ -28,10 +22,11 @@ from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
 from alpaca_pipelines.io_utils import write_json
+from alpaca_pipelines.rf.audio_features import mfcc_summary, raven_robust_features
+from alpaca_pipelines.rf.config import RfFeatureConfig
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from bioacoustics_dl_toolbox.logging.logger import create_logger
-from bioacoustics_dl_toolbox.rf.features import compute_rf_features
 
 logger = logging.getLogger(__name__)
 
@@ -70,16 +65,33 @@ def _label_for_filename(
     return 0
 
 
-def _compute_features_for_file(audio_path: Path) -> dict[str, float]:
+def _compute_features_for_file(
+    audio_path: Path,
+    feature_config: RfFeatureConfig,
+) -> dict[str, float]:
     signal, sample_rate = _load_audio_signal(audio_path)
     duration_s = float(len(signal)) / float(sample_rate)
-
-    features = compute_rf_features(
-        signal=signal,
-        sample_rate=sample_rate,
-        start_s=0.0,
-        end_s=duration_s,
+    robust = raven_robust_features(
+        y=signal,
+        sr=sample_rate,
+        t0=0.0,
+        t1=duration_s,
+        fmin=feature_config.fmin_hz,
+        fmax=feature_config.fmax_hz,
+        n_fft=feature_config.n_fft,
+        hop_length=feature_config.hop_length,
     )
+    mfcc = mfcc_summary(
+        y=signal,
+        sr=sample_rate,
+        t0=0.0,
+        t1=duration_s,
+        n_mfcc=feature_config.n_mfcc,
+        n_fft=feature_config.n_fft,
+        hop_length=feature_config.hop_length,
+        include_deltas=feature_config.include_deltas,
+    )
+    features = {**robust, **mfcc}
 
     feature_values = np.array(list(features.values()), dtype=np.float64)
     if np.any(~np.isfinite(feature_values)):
@@ -95,6 +107,7 @@ def _build_feature_table(
     dataset_handle: DatasetHandle,
     filenames: list[str],
     positive_class: str,
+    feature_config: RfFeatureConfig,
 ) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
     rows: list[dict[str, float]] = []
     labels: list[int] = []
@@ -105,7 +118,7 @@ def _build_feature_table(
         if not audio_path.is_file():
             raise FileNotFoundError("Snippet file missing: {}".format(audio_path))
 
-        features = _compute_features_for_file(audio_path)
+        features = _compute_features_for_file(audio_path, feature_config=feature_config)
         label = _label_for_filename(dataset_handle, filename, positive_class)
 
         rows.append(features)
@@ -170,11 +183,13 @@ def execute_rf_training(
             dataset_handle=dataset_handle,
             filenames=train_files,
             positive_class=spec.positive_class,
+            feature_config=spec.feature_config,
         )
         x_val, y_val, used_val_files = _build_feature_table(
             dataset_handle=dataset_handle,
             filenames=val_files,
             positive_class=spec.positive_class,
+            feature_config=spec.feature_config,
         )
 
         rf_logger.info("RF features: {} columns".format(x_train.shape[1]))
@@ -229,6 +244,13 @@ def execute_rf_training(
             raise FileExistsError("RF model output already exists: {}".format(model_path))
 
         joblib.dump(model, model_path)
+        feature_names = list(map(str, x_train.columns.tolist()))
+        metadata = {
+            "feature_family": "rf_v1",
+            "feature_names": feature_names,
+            "feature_config": spec.feature_config.model_dump(),
+        }
+        write_json(model_dir / "rf_model_metadata.json", metadata)
 
         report = {
             "run_id": run_state.run_id,
@@ -249,8 +271,10 @@ def execute_rf_training(
             },
             "features": {
                 "n_features": int(x_train.shape[1]),
-                "feature_names": list(map(str, x_train.columns.tolist())),
+                "feature_names": feature_names,
             },
+            "feature_family": "rf_v1",
+            "feature_config": spec.feature_config.model_dump(),
             "hyperparameters": {
                 "n_estimators": spec.n_estimators,
                 "max_depth": spec.max_depth,

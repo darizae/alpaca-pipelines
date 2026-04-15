@@ -1,9 +1,4 @@
-"""
-Random Forest filter post-processing.
-
-Applies an RF classifier to CNN detections, re-scoring each detection
-based on acoustic features extracted from the detection window.
-"""
+"""Random Forest filter post-processing."""
 
 from __future__ import annotations
 
@@ -16,18 +11,48 @@ import numpy as np
 import soundfile as sf
 
 from alpaca_pipelines.io_utils import read_json, write_json
-from bioacoustics_dl_toolbox.rf.features import compute_rf_features
+from alpaca_pipelines.rf.audio_features import mfcc_summary, raven_robust_features
+from alpaca_pipelines.rf.config import RfFeatureConfig
 from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
 
 def _load_rf_model(rf_model_path: str) -> RfClassifierProtocol:
-    """Load a serialized RF model from disk."""
     model: RfClassifierProtocol = joblib.load(rf_model_path)
     return model
 
 
+def _load_rf_model_metadata(rf_model_path: str) -> dict[str, Any]:
+    metadata_path = Path(rf_model_path).with_name("rf_model_metadata.json")
+    if not metadata_path.is_file():
+        raise FileNotFoundError("RF model metadata file missing: {}".format(metadata_path))
+
+    metadata = read_json(metadata_path)
+    if not isinstance(metadata, dict):
+        raise ValueError("RF model metadata must be a JSON object: {}".format(metadata_path))
+    return metadata
+
+
+def _validate_rf_metadata_contract(metadata: dict[str, Any]) -> None:
+    feature_family = metadata.get("feature_family")
+    if feature_family is None:
+        raise ValueError("RF model metadata missing required field 'feature_family'")
+    if feature_family != "rf_v1":
+        raise ValueError(
+            "Unsupported RF model feature_family {!r}; expected 'rf_v1'".format(feature_family)
+        )
+
+
+def _validate_no_legacy_cnn_feature(feature_names: np.ndarray | None) -> None:
+    if feature_names is None:
+        return
+
+    if any(str(name) == "cnn_logit_mean" for name in feature_names):
+        raise ValueError(
+            "Unsupported RF model: legacy feature 'cnn_logit_mean' is not supported by rf_v1"
+        )
+
+
 def _load_audio_signal(audio_file: str) -> tuple[np.ndarray, int]:
-    """Load an audio file as a mono float32 signal."""
     audio_data, sample_rate = sf.read(audio_file, always_2d=True, dtype="float32")
     if audio_data.ndim == 2 and audio_data.shape[1] > 1:
         audio_data = np.mean(audio_data, axis=1)
@@ -36,25 +61,49 @@ def _load_audio_signal(audio_file: str) -> tuple[np.ndarray, int]:
     return audio_data, int(sample_rate)
 
 
+def _resolve_feature_config(
+    rf_feature_config: dict[str, Any] | None,
+    metadata: dict[str, Any],
+) -> RfFeatureConfig:
+    if rf_feature_config is not None:
+        return RfFeatureConfig.model_validate(rf_feature_config)
+
+    metadata_feature_config = metadata.get("feature_config")
+    if metadata_feature_config is None:
+        raise ValueError(
+            "rf_feature_config is required when RF model metadata does not include feature_config"
+        )
+    return RfFeatureConfig.model_validate(metadata_feature_config)
+
+
 def apply_rf_filter(
-    predictions_dir: Path,
+    prediction_inputs: list[dict[str, str]],
     rf_model_path: str,
-    audio_files: list[str],
+    rf_threshold: float,
+    rf_feature_config: dict[str, Any] | None,
     prediction_logger: logging.Logger,
 ) -> None:
-    """Apply RF filter to all prediction files in the predictions directory.
-
-    For each detection, extract acoustic features from the detection window
-    and re-score using the RF model.  Writes filtered results alongside
-    the original predictions.
-    """
     rf_model = _load_rf_model(rf_model_path)
+    metadata = _load_rf_model_metadata(rf_model_path)
+    _validate_rf_metadata_contract(metadata)
+    active_feature_config = _resolve_feature_config(
+        rf_feature_config=rf_feature_config,
+        metadata=metadata,
+    )
     feature_names = getattr(rf_model, "feature_names_in_", None)
+
+    if feature_names is None:
+        metadata_feature_names = metadata.get("feature_names")
+        if metadata_feature_names is not None:
+            feature_names = np.asarray(metadata_feature_names, dtype=object)
+    _validate_no_legacy_cnn_feature(feature_names=feature_names)
 
     prediction_logger.info("RF model loaded from: {}".format(rf_model_path))
 
-    for audio_file in audio_files:
-        prediction_file = predictions_dir / "{}.json".format(Path(audio_file).stem)
+    for item in prediction_inputs:
+        audio_file = item["audio_file"]
+        prediction_file = Path(item["prediction_file"])
+
         if not prediction_file.is_file():
             prediction_logger.warning(
                 "No prediction file for {}, skipping RF filter".format(audio_file)
@@ -73,37 +122,65 @@ def apply_rf_filter(
             start_s = float(detection["start_s"])
             end_s = float(detection["end_s"])
 
-            features = compute_rf_features(
-                signal=signal,
-                sample_rate=file_sample_rate,
-                start_s=start_s,
-                end_s=end_s,
+            robust = raven_robust_features(
+                y=signal,
+                sr=file_sample_rate,
+                t0=start_s,
+                t1=end_s,
+                fmin=active_feature_config.fmin_hz,
+                fmax=active_feature_config.fmax_hz,
+                n_fft=active_feature_config.n_fft,
+                hop_length=active_feature_config.hop_length,
             )
+            mfcc = mfcc_summary(
+                y=signal,
+                sr=file_sample_rate,
+                t0=start_s,
+                t1=end_s,
+                n_mfcc=active_feature_config.n_mfcc,
+                n_fft=active_feature_config.n_fft,
+                hop_length=active_feature_config.hop_length,
+                include_deltas=active_feature_config.include_deltas,
+            )
+            feature_row = {**robust, **mfcc}
 
             if feature_names is not None:
-                feature_vector = np.array(
-                    [features[name] for name in feature_names], dtype=np.float64
-                ).reshape(1, -1)
+                try:
+                    feature_vector = np.array(
+                        [float(feature_row[str(name)]) for name in feature_names],
+                        dtype=np.float64,
+                    ).reshape(1, -1)
+                except KeyError as exc:
+                    raise KeyError(
+                        "Missing required RF feature '{}' for detection in {}".format(
+                            exc.args[0], audio_file
+                        )
+                    ) from exc
             else:
-                feature_vector = np.array(list(features.values()), dtype=np.float64).reshape(1, -1)
+                feature_vector = np.array(
+                    list(feature_row.values()),
+                    dtype=np.float64,
+                ).reshape(1, -1)
 
+            detection_with_rf = dict(detection)
             if np.any(~np.isfinite(feature_vector)):
-                detection["rf_score"] = None
-                detection["rf_pass"] = False
+                detection_with_rf["rf_score"] = None
+                detection_with_rf["rf_pass"] = False
             else:
                 rf_probabilities = rf_model.predict_proba(feature_vector)
                 rf_target_score = float(rf_probabilities[0, 1])
-                detection["rf_score"] = round(rf_target_score, 6)
-                detection["rf_pass"] = rf_target_score >= 0.5
+                detection_with_rf["rf_score"] = round(rf_target_score, 6)
+                detection_with_rf["rf_pass"] = rf_target_score >= rf_threshold
 
-            filtered_detections.append(detection)
+            filtered_detections.append(detection_with_rf)
 
         filtered_data = dict(prediction_data)
         filtered_data["detections"] = filtered_detections
         filtered_data["rf_filtered"] = True
         filtered_data["rf_model_path"] = rf_model_path
+        filtered_data["rf_threshold"] = rf_threshold
 
-        filtered_path = predictions_dir / "{}_rf_filtered.json".format(Path(audio_file).stem)
+        filtered_path = prediction_file.with_name(f"{prediction_file.stem}_rf_filtered.json")
         write_json(filtered_path, filtered_data)
 
         n_passed = sum(1 for d in filtered_detections if d.get("rf_pass", False))

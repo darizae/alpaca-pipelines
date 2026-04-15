@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+from alpaca_pipelines.rf.config import RfFeatureConfig
 
 
 class RfTrainingRunSpec(BaseModel):
@@ -29,6 +31,7 @@ class RfTrainingRunSpec(BaseModel):
     max_features: Literal["sqrt", "log2"] | float | int | None = "sqrt"
     class_weight: Literal["balanced", "balanced_subsample"] | dict[str, float] | None = "balanced"
     n_jobs: int = -1
+    feature_config: RfFeatureConfig = Field(default_factory=RfFeatureConfig)
 
     def to_spec_dict(self) -> dict[str, Any]:
         return self.model_dump()

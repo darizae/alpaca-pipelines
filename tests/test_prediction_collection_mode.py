@@ -177,3 +177,16 @@ def test_prediction_output_path_is_unique_for_same_stem_different_paths() -> Non
     )
 
     assert first != second
+
+
+def test_prediction_spec_dataset_mode_requires_rf_model_path_when_rf_filter_enabled() -> None:
+    with pytest.raises(
+        ValueError,
+        match="rf_model_path is required when apply_rf_filter is enabled",
+    ):
+        PredictionRunSpec(
+            model_path="/models/final.pt",
+            mode="dataset",
+            dataset_name="dataset_a",
+            apply_rf_filter=True,
+        )
