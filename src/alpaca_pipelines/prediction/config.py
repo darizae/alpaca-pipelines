@@ -13,6 +13,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from alpaca_pipelines.rf.config import RfFeatureConfig
+
 
 class NormalizationSpec(BaseModel):
     """Normalization parameters for prediction."""
@@ -69,6 +71,8 @@ class PredictionRunSpec(BaseModel):
 
     apply_rf_filter: bool = False
     rf_model_path: str | None = None
+    rf_threshold: float = 0.4
+    rf_feature_config: RfFeatureConfig | None = None
 
     run_name: str = ""
 

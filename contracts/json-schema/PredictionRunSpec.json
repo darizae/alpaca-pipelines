@@ -27,6 +27,43 @@
       "title": "NormalizationSpec",
       "type": "object"
     },
+    "RfFeatureConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "n_fft": {
+          "default": 2048,
+          "title": "N Fft",
+          "type": "integer"
+        },
+        "hop_length": {
+          "default": 1024,
+          "title": "Hop Length",
+          "type": "integer"
+        },
+        "n_mfcc": {
+          "default": 13,
+          "title": "N Mfcc",
+          "type": "integer"
+        },
+        "include_deltas": {
+          "default": true,
+          "title": "Include Deltas",
+          "type": "boolean"
+        },
+        "fmin_hz": {
+          "default": 0.0,
+          "title": "Fmin Hz",
+          "type": "number"
+        },
+        "fmax_hz": {
+          "default": 4000.0,
+          "title": "Fmax Hz",
+          "type": "number"
+        }
+      },
+      "title": "RfFeatureConfig",
+      "type": "object"
+    },
     "TapeFileHandleSpec": {
       "additionalProperties": false,
       "properties": {
@@ -161,6 +198,22 @@
       ],
       "default": null,
       "title": "Rf Model Path"
+    },
+    "rf_threshold": {
+      "default": 0.4,
+      "title": "Rf Threshold",
+      "type": "number"
+    },
+    "rf_feature_config": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/RfFeatureConfig"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "run_name": {
       "default": "",
