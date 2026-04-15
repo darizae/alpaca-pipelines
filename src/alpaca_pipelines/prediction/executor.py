@@ -316,6 +316,7 @@ def execute_prediction(
 
         predictions_dir = run_dir / "outputs" / "predictions"
         all_results: list[dict[str, Any]] = []
+        prediction_inputs: list[dict[str, str]] = []
         total_detections = 0
         _emit_prediction_progress(
             force=True,
@@ -386,6 +387,12 @@ def execute_prediction(
                     )
                 )
             write_json(per_file_path, file_result)
+            prediction_inputs.append(
+                {
+                    "audio_file": audio_file,
+                    "prediction_file": str(per_file_path),
+                }
+            )
 
             _emit_prediction_progress(
                 force=True,
@@ -402,9 +409,14 @@ def execute_prediction(
             from alpaca_pipelines.rf.executor import apply_rf_filter
 
             apply_rf_filter(
-                predictions_dir=predictions_dir,
+                prediction_inputs=prediction_inputs,
                 rf_model_path=spec.rf_model_path,
-                audio_files=audio_files,
+                rf_threshold=spec.rf_threshold,
+                rf_feature_config=(
+                    spec.rf_feature_config.model_dump()
+                    if spec.rf_feature_config is not None
+                    else None
+                ),
                 prediction_logger=prediction_logger,
             )
 
