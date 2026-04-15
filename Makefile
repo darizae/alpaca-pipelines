@@ -14,7 +14,7 @@ ALPACA_RUNS_ROOT ?=
 
 RUN_CONFIG ?=
 
-.PHONY: venv install lint format typecheck test \
+.PHONY: venv install lint format typecheck test check \
         env-init env-check runtime-check \
         create-training-run create-prediction-run create-evaluation-run \
         execute-run list-runs inspect-run cancel-run \
@@ -30,7 +30,7 @@ install:
 	$(VENV_PYTHON) -m pip install -e ".[dev]" && ./.venv/bin/pre-commit install
 
 lint:
-	$(VENV_PYTHON) -m ruff check .
+	$(VENV_PYTHON) -m ruff check . --fix
 
 format:
 	$(VENV_PYTHON) -m ruff format .
@@ -40,6 +40,8 @@ typecheck:
 
 test:
 	PYTHONPATH=src $(VENV_PYTHON) -m pytest -q
+
+check: format lint typecheck test
 
 env-init:
 	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
