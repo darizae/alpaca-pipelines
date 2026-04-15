@@ -24,12 +24,32 @@ def _load_rf_model(rf_model_path: str) -> RfClassifierProtocol:
 def _load_rf_model_metadata(rf_model_path: str) -> dict[str, Any]:
     metadata_path = Path(rf_model_path).with_name("rf_model_metadata.json")
     if not metadata_path.is_file():
-        return {}
+        raise FileNotFoundError("RF model metadata file missing: {}".format(metadata_path))
 
     metadata = read_json(metadata_path)
     if not isinstance(metadata, dict):
         raise ValueError("RF model metadata must be a JSON object: {}".format(metadata_path))
     return metadata
+
+
+def _validate_rf_metadata_contract(metadata: dict[str, Any]) -> None:
+    feature_family = metadata.get("feature_family")
+    if feature_family is None:
+        raise ValueError("RF model metadata missing required field 'feature_family'")
+    if feature_family != "rf_v1":
+        raise ValueError(
+            "Unsupported RF model feature_family {!r}; expected 'rf_v1'".format(feature_family)
+        )
+
+
+def _validate_no_legacy_cnn_feature(feature_names: np.ndarray | None) -> None:
+    if feature_names is None:
+        return
+
+    if any(str(name) == "cnn_logit_mean" for name in feature_names):
+        raise ValueError(
+            "Unsupported RF model: legacy feature 'cnn_logit_mean' is not supported by rf_v1"
+        )
 
 
 def _load_audio_signal(audio_file: str) -> tuple[np.ndarray, int]:
@@ -65,6 +85,7 @@ def apply_rf_filter(
 ) -> None:
     rf_model = _load_rf_model(rf_model_path)
     metadata = _load_rf_model_metadata(rf_model_path)
+    _validate_rf_metadata_contract(metadata)
     active_feature_config = _resolve_feature_config(
         rf_feature_config=rf_feature_config,
         metadata=metadata,
@@ -75,6 +96,7 @@ def apply_rf_filter(
         metadata_feature_names = metadata.get("feature_names")
         if metadata_feature_names is not None:
             feature_names = np.asarray(metadata_feature_names, dtype=object)
+    _validate_no_legacy_cnn_feature(feature_names=feature_names)
 
     prediction_logger.info("RF model loaded from: {}".format(rf_model_path))
 
@@ -121,10 +143,6 @@ def apply_rf_filter(
                 include_deltas=active_feature_config.include_deltas,
             )
             feature_row = {**robust, **mfcc}
-
-            if feature_names is not None and "cnn_logit_mean" in feature_names:
-                if "cnn_logit_mean" in detection:
-                    feature_row["cnn_logit_mean"] = float(detection["cnn_logit_mean"])
 
             if feature_names is not None:
                 try:
