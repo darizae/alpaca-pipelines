@@ -17,6 +17,10 @@ from alpaca_pipelines.contracts import RunState, RunStatus, RunType
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
+from alpaca_pipelines.prediction.review.curated import (
+    list_curated_prediction_sources,
+    materialize_curated_prediction_examples,
+)
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_meta
@@ -491,6 +495,32 @@ class PipelineAPI:
             manifest_path=manifest_path,
             destination_dir=destination_dir,
             item_id=item_id,
+        )
+
+    def materialize_curated_prediction_examples(
+        self,
+        *,
+        manifest_path: Path,
+        labels_path: Path,
+        destination_root: Path | None = None,
+    ) -> dict[str, Any]:
+        return materialize_curated_prediction_examples(
+            run_manager=self.run_manager,
+            collection_root=self.environment.collection_root,
+            datasets_root=self.environment.datasets_root,
+            manifest_path=manifest_path,
+            labels_path=labels_path,
+            destination_root=destination_root,
+        )
+
+    def list_curated_prediction_sources(
+        self,
+        *,
+        destination_root: Path | None = None,
+    ) -> dict[str, Any]:
+        return list_curated_prediction_sources(
+            datasets_root=self.environment.datasets_root,
+            destination_root=destination_root,
         )
 
     def export_detections_to_selection_table(

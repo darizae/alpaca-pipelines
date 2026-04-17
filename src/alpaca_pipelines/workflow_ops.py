@@ -496,6 +496,7 @@ class WorkflowOperationManager:
                 "n_target": build_result.n_target,
                 "n_noise": build_result.n_noise,
                 "splits": build_result.splits,
+                "curated_summary": build_result.curated_summary,
             }
         if operation.kind == "prepare_review":
             dataset_name = str(spec["dataset_name"])

@@ -476,6 +476,7 @@ def test_dataset_build_operation_completes(
             n_target=5,
             n_noise=6,
             splits={"train": 7, "val": 2, "test": 2},
+            curated_summary={"curated_candidates": 0, "curated_selected": 0, "curated_deduped": 0},
         ),
     )
 

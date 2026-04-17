@@ -41,6 +41,7 @@ def build_manifest(
 
     entries_hash = _compute_entries_hash(snippets, recordings)
     n_recordings, n_recordings_with_sidecar = compute_recording_counts(recordings)
+    provenance_summary, manual_curation_summary = _build_provenance_summaries(snippets)
 
     meta = ManifestMeta(
         strategy_name=strategy_name,
@@ -55,6 +56,8 @@ def build_manifest(
         n_recordings_with_sidecar=n_recordings_with_sidecar,
         manifest_hash=entries_hash,
         strategy_config=strategy_config,
+        provenance_summary=provenance_summary,
+        manual_curation_summary=manual_curation_summary,
     )
 
     return Manifest(meta=meta, snippets=snippets, recordings=recordings)
@@ -77,3 +80,67 @@ def load_manifest(dataset_dir: Path, fs: FileSystem = _DEFAULT_FS) -> Manifest:
     if not isinstance(data, dict):
         raise ValueError(f"Expected JSON object: {manifest_path}")
     return Manifest.model_validate(data)
+
+
+def _build_provenance_summaries(
+    snippets: list[SnippetEntry],
+) -> tuple[dict[str, dict[str, int] | int], dict[str, dict[str, int] | int]]:
+    by_provenance_type: dict[str, int] = {}
+    by_label: dict[str, int] = {}
+    by_collection: dict[str, int] = {}
+    by_source_recording_key: dict[str, int] = {}
+
+    manual_by_label: dict[str, int] = {}
+    manual_by_collection: dict[str, int] = {}
+    manual_by_source_recording_key: dict[str, int] = {}
+    manual_total = 0
+
+    for snippet in snippets:
+        provenance_type = _resolve_provenance_type(snippet)
+        by_provenance_type[provenance_type] = by_provenance_type.get(provenance_type, 0) + 1
+        by_label[snippet.classification] = by_label.get(snippet.classification, 0) + 1
+        source_collection = snippet.source_collection_name or snippet.collection
+        by_collection[source_collection] = by_collection.get(source_collection, 0) + 1
+        if snippet.source_recording_key:
+            by_source_recording_key[snippet.source_recording_key] = (
+                by_source_recording_key.get(snippet.source_recording_key, 0) + 1
+            )
+
+        if provenance_type == "manual_review_curated":
+            manual_total += 1
+            manual_label = snippet.curated_label or snippet.classification
+            manual_by_label[manual_label] = manual_by_label.get(manual_label, 0) + 1
+            manual_by_collection[source_collection] = (
+                manual_by_collection.get(source_collection, 0) + 1
+            )
+            if snippet.source_recording_key:
+                manual_by_source_recording_key[snippet.source_recording_key] = (
+                    manual_by_source_recording_key.get(snippet.source_recording_key, 0) + 1
+                )
+
+    provenance_summary: dict[str, dict[str, int] | int] = {
+        "by_provenance_type": dict(sorted(by_provenance_type.items())),
+        "by_label": dict(sorted(by_label.items())),
+        "by_collection": dict(sorted(by_collection.items())),
+        "by_source_recording_key": dict(sorted(by_source_recording_key.items())),
+        "total_manual_review_curated": manual_total,
+    }
+    manual_curation_summary: dict[str, dict[str, int] | int] = {
+        "total_examples": manual_total,
+        "by_label": dict(sorted(manual_by_label.items())),
+        "by_collection": dict(sorted(manual_by_collection.items())),
+        "by_source_recording_key": dict(sorted(manual_by_source_recording_key.items())),
+    }
+    return provenance_summary, manual_curation_summary
+
+
+def _resolve_provenance_type(snippet: SnippetEntry) -> str:
+    if snippet.provenance_type is not None:
+        return snippet.provenance_type
+    if snippet.source_type in {"hum", "low_quality_hum"}:
+        return "indexed_hum"
+    if snippet.source_type == "mined_source":
+        return "raw_negative_source"
+    if snippet.source_type == "manual_review_curated":
+        return "manual_review_curated"
+    return "indexed_clip"
