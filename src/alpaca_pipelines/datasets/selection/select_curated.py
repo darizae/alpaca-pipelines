@@ -5,6 +5,8 @@ from collections import defaultdict
 from itertools import count
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict
+
 from alpaca_pipelines.datasets.contracts import SnippetEntry
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.selection.select_positives import _copy_wav
@@ -13,6 +15,15 @@ from alpaca_pipelines.prediction.review.curated import (
     CuratedPredictionSourceItem,
     CuratedPredictionSourceManifest,
 )
+
+_CURATED_DEDUPE_KEY_POLICY = "source_recording_key|round(start_s,6)|round(end_s,6)|label"
+
+
+class _CuratedManifestItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    manifest_path: str
+    item: CuratedPredictionSourceItem
 
 
 def select_curated_examples(
@@ -24,11 +35,15 @@ def select_curated_examples(
     max_examples: int | None,
     seed: int,
     fs: FileSystem = _DEFAULT_FS,
-) -> tuple[list[SnippetEntry], dict[str, int]]:
-    manifests = _load_curated_manifests(curated_root, fs)
-    filtered_items = _apply_filters(manifests, filters)
-    deduped_items, deduped_count = _dedupe_items(filtered_items)
-    selected_items = _limit_items(deduped_items, max_examples=max_examples, seed=seed)
+) -> tuple[list[SnippetEntry], dict[str, int | str | bool]]:
+    manifest_items = _load_curated_manifest_items(curated_root, fs)
+    filtered_items = _apply_filters(manifest_items, filters)
+    dedupe_result = _dedupe_items(filtered_items)
+    selected_items = _limit_items(
+        dedupe_result.deduped,
+        max_examples=max_examples,
+        seed=seed,
+    )
 
     snippets: list[SnippetEntry] = []
     for item in selected_items:
@@ -41,7 +56,7 @@ def select_curated_examples(
             filename=filename,
             classification=item.label,
             source_type="manual_review_curated",
-            source_path=item.source_relative_path,
+            source_path=item.source_display_path,
             start_s=0.0,
             end_s=item.duration_s,
             duration_s=item.duration_s,
@@ -56,6 +71,7 @@ def select_curated_examples(
             source_collection_name=item.source_collection_name,
             source_category_dir=item.source_category_dir,
             source_relative_path=item.source_relative_path,
+            source_display_path=item.source_display_path,
             source_prediction_run_id=item.prediction_run_id,
             source_review_session_id=item.review_session_id,
             source_review_item_id=item.review_item_id,
@@ -63,26 +79,36 @@ def select_curated_examples(
         )
         snippets.append(snippet)
 
-    summary = {
+    summary: dict[str, int | str | bool] = {
         "curated_candidates": len(filtered_items),
         "curated_selected": len(selected_items),
-        "curated_deduped": deduped_count,
+        "curated_deduped": dedupe_result.duplicates_removed,
+        "curated_duplicates_removed": dedupe_result.duplicates_removed,
+        "curated_dedupe_key_policy": _CURATED_DEDUPE_KEY_POLICY,
+        "curated_duplicates_crossed_source_manifests": dedupe_result.cross_manifest_duplicates,
     }
     return snippets, summary
 
 
-def _load_curated_manifests(
-    curated_root: Path, fs: FileSystem
-) -> list[CuratedPredictionSourceManifest]:
+class _DedupeResult(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    deduped: list[CuratedPredictionSourceItem]
+    duplicates_removed: int
+    cross_manifest_duplicates: bool
+
+
+def _load_curated_manifest_items(curated_root: Path, fs: FileSystem) -> list[_CuratedManifestItem]:
     if not fs.exists(curated_root):
         return []
 
-    manifests: list[CuratedPredictionSourceManifest] = []
+    manifest_items: list[_CuratedManifestItem] = []
     for manifest_path in _find_manifest_paths(curated_root, fs):
         payload = fs.read_text(manifest_path)
         manifest = CuratedPredictionSourceManifest.model_validate_json(payload)
-        manifests.append(manifest)
-    return manifests
+        for item in manifest.items:
+            manifest_items.append(_CuratedManifestItem(manifest_path=str(manifest_path), item=item))
+    return manifest_items
 
 
 def _find_manifest_paths(root: Path, fs: FileSystem) -> list[Path]:
@@ -98,51 +124,58 @@ def _find_manifest_paths(root: Path, fs: FileSystem) -> list[Path]:
 
 
 def _apply_filters(
-    manifests: list[CuratedPredictionSourceManifest],
+    manifest_items: list[_CuratedManifestItem],
     filters: dict[str, list[str]] | None,
-) -> list[CuratedPredictionSourceItem]:
+) -> list[_CuratedManifestItem]:
     collection_names = set(filters.get("collection_names", [])) if filters else set()
     labels = set(filters.get("labels", [])) if filters else set()
     prediction_run_ids = set(filters.get("prediction_run_ids", [])) if filters else set()
     source_recording_keys = set(filters.get("source_recording_keys", [])) if filters else set()
 
-    selected: list[CuratedPredictionSourceItem] = []
-    for manifest in manifests:
-        for item in manifest.items:
-            if collection_names and item.source_collection_name not in collection_names:
-                continue
-            if labels and item.label not in labels:
-                continue
-            if prediction_run_ids and item.prediction_run_id not in prediction_run_ids:
-                continue
-            if source_recording_keys and item.source_recording_key not in source_recording_keys:
-                continue
-            selected.append(item)
+    selected: list[_CuratedManifestItem] = []
+    for manifest_item in manifest_items:
+        item = manifest_item.item
+        if collection_names and item.source_collection_name not in collection_names:
+            continue
+        if labels and item.label not in labels:
+            continue
+        if prediction_run_ids and item.prediction_run_id not in prediction_run_ids:
+            continue
+        if source_recording_keys and item.source_recording_key not in source_recording_keys:
+            continue
+        selected.append(manifest_item)
     return selected
 
 
-def _dedupe_items(
-    items: list[CuratedPredictionSourceItem],
-) -> tuple[list[CuratedPredictionSourceItem], int]:
-    grouped: dict[tuple[str, float, float, str], list[CuratedPredictionSourceItem]] = defaultdict(
-        list
-    )
-    for item in items:
+def _dedupe_items(items: list[_CuratedManifestItem]) -> _DedupeResult:
+    grouped: dict[tuple[str, float, float, str], list[_CuratedManifestItem]] = defaultdict(list)
+    for manifest_item in items:
+        item = manifest_item.item
         dedupe_key = (
             item.source_recording_key,
             round(item.start_s, 6),
             round(item.end_s, 6),
             item.label,
         )
-        grouped[dedupe_key].append(item)
+        grouped[dedupe_key].append(manifest_item)
 
     deduped: list[CuratedPredictionSourceItem] = []
-    duplicates = 0
+    duplicates_removed = 0
+    cross_manifest_duplicates = False
     for candidates in grouped.values():
-        deduped.append(sorted(candidates, key=lambda candidate: candidate.curated_example_id)[0])
-        duplicates += max(len(candidates) - 1, 0)
+        deduped.append(
+            sorted(candidates, key=lambda candidate: candidate.item.curated_example_id)[0].item
+        )
+        duplicates_removed += max(len(candidates) - 1, 0)
+        if len({candidate.manifest_path for candidate in candidates}) > 1:
+            cross_manifest_duplicates = True
+
     deduped.sort(key=lambda item: item.curated_example_id)
-    return deduped, duplicates
+    return _DedupeResult(
+        deduped=deduped,
+        duplicates_removed=duplicates_removed,
+        cross_manifest_duplicates=cross_manifest_duplicates,
+    )
 
 
 def _limit_items(

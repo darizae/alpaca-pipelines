@@ -8,6 +8,7 @@ from alpaca_pipelines.prediction.review.config import (
     PredictionReviewSpectrogramConfig,
 )
 from alpaca_pipelines.prediction.review.curated import (
+    CuratedPredictionExportManifest,
     CuratedPredictionSourceManifest,
     list_curated_prediction_sources,
     materialize_curated_prediction_examples,
@@ -23,6 +24,7 @@ __all__ = [
     "PredictionReviewSessionItem",
     "PredictionReviewSessionManifest",
     "PredictionReviewSpectrogramConfig",
+    "CuratedPredictionExportManifest",
     "CuratedPredictionSourceManifest",
     "generate_prediction_review_preview",
     "generate_prediction_review_batch",

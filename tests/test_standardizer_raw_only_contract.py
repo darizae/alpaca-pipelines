@@ -460,7 +460,8 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
             "source_type": "manual_review_curated",
             "collection_name": "audio_collection_alpha",
             "source_category_dir": "raw_recordings",
-            "source_relative_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+            "source_relative_path": "401_20250211_075558.WAV",
+            "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
             "source_recording_key": "401_20250211_075558",
             "source_audio_file": str(
                 collection_root
@@ -485,7 +486,8 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
                     "source_recording_key": "401_20250211_075558",
                     "source_collection_name": "audio_collection_alpha",
                     "source_category_dir": "raw_recordings",
-                    "source_relative_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+                    "source_relative_path": "401_20250211_075558.WAV",
+                    "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
                     "source_audio_file": str(
                         collection_root
                         / "audio_collection_alpha"
@@ -510,7 +512,8 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
                     "source_recording_key": "401_20250211_075558",
                     "source_collection_name": "audio_collection_alpha",
                     "source_category_dir": "raw_recordings",
-                    "source_relative_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+                    "source_relative_path": "401_20250211_075558.WAV",
+                    "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
                     "source_audio_file": str(
                         collection_root
                         / "audio_collection_alpha"

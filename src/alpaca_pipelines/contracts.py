@@ -96,6 +96,7 @@ class ManifestSnippet(BaseModel):
     source_collection_name: str | None = None
     source_category_dir: str | None = None
     source_relative_path: str | None = None
+    source_display_path: str | None = None
     source_prediction_run_id: str | None = None
     source_review_session_id: str | None = None
     source_review_item_id: str | None = None

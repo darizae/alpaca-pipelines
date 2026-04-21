@@ -97,6 +97,8 @@ def _build_provenance_summaries(
 
     for snippet in snippets:
         provenance_type = _resolve_provenance_type(snippet)
+        if provenance_type == "manual_review_curated":
+            _validate_manual_review_curated_snippet(snippet)
         by_provenance_type[provenance_type] = by_provenance_type.get(provenance_type, 0) + 1
         by_label[snippet.classification] = by_label.get(snippet.classification, 0) + 1
         source_collection = snippet.source_collection_name or snippet.collection
@@ -144,3 +146,24 @@ def _resolve_provenance_type(snippet: SnippetEntry) -> str:
     if snippet.source_type == "manual_review_curated":
         return "manual_review_curated"
     return "indexed_clip"
+
+
+def _validate_manual_review_curated_snippet(snippet: SnippetEntry) -> None:
+    if not snippet.source_curated_example_id:
+        raise ValueError(
+            "manual_review_curated snippet missing source_curated_example_id: uid {}".format(
+                snippet.uid
+            )
+        )
+    if not snippet.source_review_session_id:
+        raise ValueError(
+            "manual_review_curated snippet missing source_review_session_id: uid {}".format(
+                snippet.uid
+            )
+        )
+    if not snippet.source_review_item_id:
+        raise ValueError(
+            "manual_review_curated snippet missing source_review_item_id: uid {}".format(
+                snippet.uid
+            )
+        )

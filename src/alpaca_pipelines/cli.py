@@ -375,9 +375,24 @@ def _cmd_prediction_review_export(args: argparse.Namespace) -> None:
 def _cmd_prediction_review_materialize_curated(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
+        has_manifest_mode = args.manifest is not None or args.labels is not None
+        has_export_mode = args.curated_export_manifest is not None
+        if has_manifest_mode and has_export_mode:
+            raise ValueError(
+                "Provide either --manifest/--labels or --curated-export-manifest, not both"
+            )
+        if not has_manifest_mode and not has_export_mode:
+            raise ValueError(
+                "Provide either --manifest with --labels, or --curated-export-manifest"
+            )
+        if has_manifest_mode and (args.manifest is None or args.labels is None):
+            raise ValueError("--manifest and --labels must be provided together")
         payload = api.materialize_curated_prediction_examples(
-            manifest_path=Path(args.manifest),
-            labels_path=Path(args.labels),
+            manifest_path=Path(args.manifest) if args.manifest else None,
+            labels_path=Path(args.labels) if args.labels else None,
+            curated_export_manifest=Path(args.curated_export_manifest)
+            if args.curated_export_manifest
+            else None,
             destination_root=Path(args.destination_root) if args.destination_root else None,
         )
     except Exception as exc:
@@ -681,8 +696,9 @@ def _build_parser() -> argparse.ArgumentParser:
     review_export_parser.add_argument("--json", action="store_true")
 
     review_materialize_parser = subparsers.add_parser("prediction-review-materialize-curated")
-    review_materialize_parser.add_argument("--manifest", required=True)
-    review_materialize_parser.add_argument("--labels", required=True)
+    review_materialize_parser.add_argument("--manifest", default=None)
+    review_materialize_parser.add_argument("--labels", default=None)
+    review_materialize_parser.add_argument("--curated-export-manifest", default=None)
     review_materialize_parser.add_argument("--destination-root", default=None)
     review_materialize_parser.add_argument("--json", action="store_true")
 

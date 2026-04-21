@@ -1,0 +1,206 @@
+{
+  "$defs": {
+    "CuratedPredictionSourceItem": {
+      "additionalProperties": false,
+      "properties": {
+        "curated_example_id": {
+          "title": "Curated Example Id",
+          "type": "string"
+        },
+        "review_item_id": {
+          "title": "Review Item Id",
+          "type": "string"
+        },
+        "detection_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detection Index"
+        },
+        "start_s": {
+          "title": "Start S",
+          "type": "number"
+        },
+        "end_s": {
+          "title": "End S",
+          "type": "number"
+        },
+        "duration_s": {
+          "title": "Duration S",
+          "type": "number"
+        },
+        "detection_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detection Score"
+        },
+        "label": {
+          "enum": [
+            "target",
+            "noise"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "snippet_wav_path": {
+          "title": "Snippet Wav Path",
+          "type": "string"
+        },
+        "source_recording_key": {
+          "title": "Source Recording Key",
+          "type": "string"
+        },
+        "source_collection_name": {
+          "title": "Source Collection Name",
+          "type": "string"
+        },
+        "source_category_dir": {
+          "title": "Source Category Dir",
+          "type": "string"
+        },
+        "source_relative_path": {
+          "title": "Source Relative Path",
+          "type": "string"
+        },
+        "source_display_path": {
+          "title": "Source Display Path",
+          "type": "string"
+        },
+        "source_audio_file": {
+          "title": "Source Audio File",
+          "type": "string"
+        },
+        "prediction_run_id": {
+          "title": "Prediction Run Id",
+          "type": "string"
+        },
+        "review_session_id": {
+          "title": "Review Session Id",
+          "type": "string"
+        },
+        "provenance_type": {
+          "const": "manual_review_curated",
+          "default": "manual_review_curated",
+          "title": "Provenance Type",
+          "type": "string"
+        },
+        "payload_json": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Payload Json"
+        }
+      },
+      "required": [
+        "curated_example_id",
+        "review_item_id",
+        "start_s",
+        "end_s",
+        "duration_s",
+        "label",
+        "snippet_wav_path",
+        "source_recording_key",
+        "source_collection_name",
+        "source_category_dir",
+        "source_relative_path",
+        "source_display_path",
+        "source_audio_file",
+        "prediction_run_id",
+        "review_session_id"
+      ],
+      "title": "CuratedPredictionSourceItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source_type": {
+      "const": "manual_review_curated",
+      "default": "manual_review_curated",
+      "title": "Source Type",
+      "type": "string"
+    },
+    "collection_name": {
+      "title": "Collection Name",
+      "type": "string"
+    },
+    "source_category_dir": {
+      "title": "Source Category Dir",
+      "type": "string"
+    },
+    "source_relative_path": {
+      "title": "Source Relative Path",
+      "type": "string"
+    },
+    "source_display_path": {
+      "title": "Source Display Path",
+      "type": "string"
+    },
+    "source_recording_key": {
+      "title": "Source Recording Key",
+      "type": "string"
+    },
+    "source_audio_file": {
+      "title": "Source Audio File",
+      "type": "string"
+    },
+    "prediction_run_id": {
+      "title": "Prediction Run Id",
+      "type": "string"
+    },
+    "review_session_id": {
+      "title": "Review Session Id",
+      "type": "string"
+    },
+    "created_at": {
+      "title": "Created At",
+      "type": "string"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/CuratedPredictionSourceItem"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "collection_name",
+    "source_category_dir",
+    "source_relative_path",
+    "source_display_path",
+    "source_recording_key",
+    "source_audio_file",
+    "prediction_run_id",
+    "review_session_id",
+    "created_at"
+  ],
+  "title": "CuratedPredictionSourceManifest",
+  "type": "object"
+}
