@@ -500,8 +500,9 @@ class PipelineAPI:
     def materialize_curated_prediction_examples(
         self,
         *,
-        manifest_path: Path,
-        labels_path: Path,
+        manifest_path: Path | None = None,
+        labels_path: Path | None = None,
+        curated_export_manifest: Path | None = None,
         destination_root: Path | None = None,
     ) -> dict[str, Any]:
         return materialize_curated_prediction_examples(
@@ -510,6 +511,7 @@ class PipelineAPI:
             datasets_root=self.environment.datasets_root,
             manifest_path=manifest_path,
             labels_path=labels_path,
+            curated_export_manifest=curated_export_manifest,
             destination_root=destination_root,
         )
 

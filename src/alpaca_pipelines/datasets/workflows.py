@@ -42,7 +42,7 @@ class BuildResult:
     n_target: int
     n_noise: int
     splits: dict[str, int]
-    curated_summary: dict[str, int]
+    curated_summary: dict[str, int | str | bool]
 
 
 @dataclass(frozen=True)
@@ -118,10 +118,13 @@ def build_dataset(
         duration_tolerance_s=strategy_config.duration_tolerance_s,
         fs=fs,
     )
-    curated_summary: dict[str, int] = {
+    curated_summary: dict[str, int | str | bool] = {
         "curated_candidates": 0,
         "curated_selected": 0,
         "curated_deduped": 0,
+        "curated_duplicates_removed": 0,
+        "curated_dedupe_key_policy": "source_recording_key|round(start_s,6)|round(end_s,6)|label",
+        "curated_duplicates_crossed_source_manifests": False,
     }
     curated_snippets: list[SnippetEntry] = []
     if strategy_config.include_manual_review_curated:

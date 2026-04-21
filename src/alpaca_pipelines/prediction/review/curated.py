@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 from collections import defaultdict
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -13,7 +13,6 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from alpaca_pipelines.datasets.audio_utils import extract_segment
 from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.prediction.review.config import (
-    PredictionReviewSessionItem,
     PredictionReviewSessionManifest,
 )
 from alpaca_pipelines.recordings import derive_source_recording_key_from_stem
@@ -38,6 +37,43 @@ class CuratedLabelAssignments(BaseModel):
         return self
 
 
+class CuratedPredictionExportItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_item_id: str
+    source_audio_file: str
+    start_s: float
+    end_s: float
+    label: Literal["target", "noise"]
+    detection_index: int | None = None
+    detection_score: float | None = None
+    source_collection_name: str | None = None
+    source_category_dir: str | None = None
+    source_relative_path: str | None = None
+    source_recording_key: str | None = None
+    payload_json: dict[str, object] | None = None
+
+
+class CuratedPredictionExportManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal[1] = 1
+    prediction_run_id: str
+    review_session_id: str
+    source_collection_name: str | None = None
+    source_category_dir: str | None = None
+    source_relative_path: str | None = None
+    source_recording_key: str | None = None
+    source_audio_file: str | None = None
+    items: list[CuratedPredictionExportItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_items(self) -> "CuratedPredictionExportManifest":
+        if not self.items:
+            raise ValueError("items must contain at least one curated export item")
+        return self
+
+
 class CuratedPredictionSourceItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -54,6 +90,7 @@ class CuratedPredictionSourceItem(BaseModel):
     source_collection_name: str
     source_category_dir: str
     source_relative_path: str
+    source_display_path: str
     source_audio_file: str
     prediction_run_id: str
     review_session_id: str
@@ -67,10 +104,11 @@ class CuratedPredictionSourceManifest(BaseModel):
     schema_version: Literal[1] = 1
     source_type: Literal["manual_review_curated"] = CURATED_SOURCE_TYPE
     collection_name: str
-    source_category_dir: str | None = None
-    source_relative_path: str | None = None
-    source_recording_key: str | None = None
-    source_audio_file: str | None = None
+    source_category_dir: str
+    source_relative_path: str
+    source_display_path: str
+    source_recording_key: str
+    source_audio_file: str
     prediction_run_id: str
     review_session_id: str
     created_at: str
@@ -81,6 +119,24 @@ class CuratedPredictionSourceManifest(BaseModel):
         if not self.items:
             raise ValueError("items must contain at least one curated entry")
         return self
+
+
+class _MaterializationItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    review_item_id: str
+    source_audio_file: str
+    start_s: float
+    end_s: float
+    label: Literal["target", "noise"]
+    detection_index: int | None = None
+    detection_score: float | None = None
+    source_collection_name: str
+    source_category_dir: str
+    source_relative_path: str
+    source_display_path: str
+    source_recording_key: str
+    payload_json: dict[str, object] | None = None
 
 
 def curated_sources_root(
@@ -98,31 +154,62 @@ def materialize_curated_prediction_examples(
     run_manager: RunManager,
     collection_root: Path,
     datasets_root: Path,
-    manifest_path: Path,
-    labels_path: Path,
+    manifest_path: Path | None = None,
+    labels_path: Path | None = None,
+    curated_export_manifest: Path | None = None,
     destination_root: Path | None = None,
 ) -> dict[str, Any]:
-    review_manifest = _load_review_manifest(manifest_path)
-    _validate_prediction_run(run_manager, review_manifest.prediction_run_id)
-    labels = _load_labels(labels_path)
+    prediction_run_id: str
+    review_session_id: str
+    materialization_items: list[_MaterializationItem]
 
-    labeled_items: list[tuple[PredictionReviewSessionItem, Literal["target", "noise"]]] = []
-    for item in review_manifest.items:
-        label = labels.get(item.item_id)
-        if label in {"target", "noise"}:
-            labeled_items.append((item, label))
-    if not labeled_items:
+    if curated_export_manifest is not None:
+        if manifest_path is not None or labels_path is not None:
+            raise ValueError(
+                "curated_export_manifest mode does not allow manifest_path or labels_path"
+            )
+        curated_export = _load_curated_export_manifest(curated_export_manifest)
+        _validate_prediction_run(run_manager, curated_export.prediction_run_id)
+        prediction_run_id = curated_export.prediction_run_id
+        review_session_id = curated_export.review_session_id
+        materialization_items = _materialization_items_from_curated_export(
+            curated_export=curated_export,
+            collection_root=collection_root,
+        )
+    else:
+        if manifest_path is None or labels_path is None:
+            raise ValueError("Provide either manifest_path+labels_path or curated_export_manifest")
+        review_manifest = _load_review_manifest(manifest_path)
+        _validate_prediction_run(run_manager, review_manifest.prediction_run_id)
+        labels = _load_labels(labels_path)
+        prediction_run_id = review_manifest.prediction_run_id
+        review_session_id = review_manifest.session_id
+        materialization_items = _materialization_items_from_review_manifest(
+            review_manifest=review_manifest,
+            labels=labels,
+            collection_root=collection_root,
+        )
+
+    if not materialization_items:
         raise ValueError("No eligible labeled review items to materialize")
 
     root = curated_sources_root(datasets_root=datasets_root, destination_root=destination_root)
     root.mkdir(parents=True, exist_ok=True)
 
-    groups: dict[str, list[tuple[PredictionReviewSessionItem, Literal["target", "noise"]]]] = (
-        defaultdict(list)
-    )
-    for item, label in labeled_items:
-        source_collection_name, _, _, _ = _resolve_source_fields(item, collection_root)
-        groups[source_collection_name].append((item, label))
+    groups: dict[
+        tuple[str, str, str, str, str, str],
+        list[_MaterializationItem],
+    ] = defaultdict(list)
+    for item in materialization_items:
+        key = (
+            item.source_collection_name,
+            item.source_category_dir,
+            item.source_relative_path,
+            item.source_display_path,
+            item.source_recording_key,
+            item.source_audio_file,
+        )
+        groups[key].append(item)
 
     manifests_created: list[str] = []
     by_label: dict[str, int] = {"target": 0, "noise": 0}
@@ -131,9 +218,16 @@ def materialize_curated_prediction_examples(
     skipped_count = 0
     source_recording_keys: set[str] = set()
 
-    for collection_name, grouped_items in groups.items():
+    for (
+        collection_name,
+        source_category_dir,
+        source_relative_path,
+        source_display_path,
+        source_recording_key,
+        source_audio_file,
+    ), grouped_items in sorted(groups.items()):
         session_dir = (
-            root / collection_name / review_manifest.prediction_run_id / review_manifest.session_id
+            root / collection_name / prediction_run_id / review_session_id / source_recording_key
         )
         snippets_dir = session_dir / CURATED_SNIPPETS_DIRNAME
         snippets_dir.mkdir(parents=True, exist_ok=True)
@@ -141,36 +235,30 @@ def materialize_curated_prediction_examples(
         existing_items_by_id = _load_existing_items(manifest_out_path)
 
         new_items: list[CuratedPredictionSourceItem] = []
-        for item, label in sorted(grouped_items, key=lambda pair: pair[0].item_id):
-            (
-                source_collection_name,
-                source_category_dir,
-                source_relative_path,
-                source_recording_key,
-            ) = _resolve_source_fields(item, collection_root)
-            source_recording_keys.add(source_recording_key)
+        for item in sorted(grouped_items, key=lambda value: value.review_item_id):
+            source_recording_keys.add(item.source_recording_key)
 
             curated_example_id = _build_curated_example_id(
-                prediction_run_id=review_manifest.prediction_run_id,
-                review_session_id=review_manifest.session_id,
-                item_id=item.item_id,
+                prediction_run_id=prediction_run_id,
+                review_session_id=review_session_id,
+                review_item_id=item.review_item_id,
             )
-            snippet_filename = f"{label}_{curated_example_id}.wav"
+            snippet_filename = f"{item.label}_{curated_example_id}.wav"
             snippet_path = snippets_dir / snippet_filename
 
             previous = existing_items_by_id.get(curated_example_id)
             needs_update = (
                 previous is None
-                or previous.label != label
+                or previous.label != item.label
                 or previous.start_s != item.start_s
                 or previous.end_s != item.end_s
-                or previous.source_recording_key != source_recording_key
-                or previous.source_audio_file != item.audio_file
+                or previous.source_recording_key != item.source_recording_key
+                or previous.source_audio_file != item.source_audio_file
                 or not snippet_path.is_file()
             )
             if needs_update:
                 duration_s = extract_segment(
-                    source_path=Path(item.audio_file),
+                    source_path=Path(item.source_audio_file),
                     start_s=item.start_s,
                     end_s=item.end_s,
                     destination_path=snippet_path,
@@ -189,38 +277,39 @@ def materialize_curated_prediction_examples(
                 duration_s = previous.duration_s
                 skipped_count += 1
 
-            by_label[label] += 1
+            by_label[item.label] += 1
             new_items.append(
                 CuratedPredictionSourceItem(
                     curated_example_id=curated_example_id,
-                    review_item_id=item.review_item_id or item.item_id,
+                    review_item_id=item.review_item_id,
                     detection_index=item.detection_index,
                     start_s=item.start_s,
                     end_s=item.end_s,
                     duration_s=duration_s,
                     detection_score=item.detection_score,
-                    label=label,
+                    label=item.label,
                     snippet_wav_path=str(snippet_path),
-                    source_recording_key=source_recording_key,
-                    source_collection_name=source_collection_name,
-                    source_category_dir=source_category_dir,
-                    source_relative_path=source_relative_path,
-                    source_audio_file=item.audio_file,
-                    prediction_run_id=review_manifest.prediction_run_id,
-                    review_session_id=review_manifest.session_id,
+                    source_recording_key=item.source_recording_key,
+                    source_collection_name=item.source_collection_name,
+                    source_category_dir=item.source_category_dir,
+                    source_relative_path=item.source_relative_path,
+                    source_display_path=item.source_display_path,
+                    source_audio_file=item.source_audio_file,
+                    prediction_run_id=prediction_run_id,
+                    review_session_id=review_session_id,
                     payload_json=item.payload_json,
                 )
             )
 
-        template_item = new_items[0]
         manifest = CuratedPredictionSourceManifest(
             collection_name=collection_name,
-            source_category_dir=template_item.source_category_dir,
-            source_relative_path=template_item.source_relative_path,
-            source_recording_key=template_item.source_recording_key,
-            source_audio_file=template_item.source_audio_file,
-            prediction_run_id=review_manifest.prediction_run_id,
-            review_session_id=review_manifest.session_id,
+            source_category_dir=source_category_dir,
+            source_relative_path=source_relative_path,
+            source_display_path=source_display_path,
+            source_recording_key=source_recording_key,
+            source_audio_file=source_audio_file,
+            prediction_run_id=prediction_run_id,
+            review_session_id=review_session_id,
             created_at=_now_iso(),
             items=new_items,
         )
@@ -230,13 +319,13 @@ def materialize_curated_prediction_examples(
     return {
         "curated_source_root": str(root),
         "manifest_paths": manifests_created,
-        "prediction_run_id": review_manifest.prediction_run_id,
-        "review_session_id": review_manifest.session_id,
+        "prediction_run_id": prediction_run_id,
+        "review_session_id": review_session_id,
         "counts_by_label": by_label,
         "created_count": created_count,
         "updated_count": updated_count,
         "skipped_count": skipped_count,
-        "total_items": len(labeled_items),
+        "total_items": len(materialization_items),
         "source_recording_keys": sorted(source_recording_keys),
     }
 
@@ -317,6 +406,17 @@ def _load_review_manifest(manifest_path: Path) -> PredictionReviewSessionManifes
     return PredictionReviewSessionManifest.model_validate(raw_payload)
 
 
+def _load_curated_export_manifest(manifest_path: Path) -> CuratedPredictionExportManifest:
+    if not manifest_path.is_file():
+        raise FileNotFoundError("Curated export manifest file not found: {}".format(manifest_path))
+    raw_payload = read_json(manifest_path)
+    if not isinstance(raw_payload, dict):
+        raise ValueError(
+            "Expected JSON object in curated export manifest: {}".format(manifest_path)
+        )
+    return CuratedPredictionExportManifest.model_validate(raw_payload)
+
+
 def _validate_prediction_run(run_manager: RunManager, prediction_run_id: str) -> None:
     run_state = run_manager.find_run(prediction_run_id)
     if run_state.run_type != "prediction":
@@ -333,19 +433,12 @@ def _load_labels(labels_path: Path) -> dict[str, Literal["target", "noise"]]:
     if not labels_path.is_file():
         raise FileNotFoundError("Curated labels file not found: {}".format(labels_path))
     payload = read_json(labels_path)
-    if isinstance(payload, dict) and "labels" in payload:
-        contract = CuratedLabelAssignments.model_validate(payload)
-        return contract.labels
-    if isinstance(payload, dict):
-        validated: dict[str, Literal["target", "noise"]] = {}
-        for key, value in payload.items():
-            if value in {"target", "noise"}:
-                validated[str(key)] = value
-        if validated:
-            return validated
-    raise ValueError(
-        "Invalid curated labels payload. Expected {'labels': {'item_id': 'target|noise'}}"
-    )
+    if not isinstance(payload, dict):
+        raise ValueError(
+            "Invalid curated labels payload. Expected {'labels': {'item_id': 'target|noise'}}"
+        )
+    contract = CuratedLabelAssignments.model_validate(payload)
+    return contract.labels
 
 
 def _load_existing_items(manifest_path: Path) -> dict[str, CuratedPredictionSourceItem]:
@@ -358,53 +451,307 @@ def _load_existing_items(manifest_path: Path) -> dict[str, CuratedPredictionSour
     return {item.curated_example_id: item for item in manifest.items}
 
 
-def _resolve_source_fields(
-    item: PredictionReviewSessionItem,
+def _materialization_items_from_review_manifest(
+    *,
+    review_manifest: PredictionReviewSessionManifest,
+    labels: dict[str, Literal["target", "noise"]],
     collection_root: Path,
-) -> tuple[str, str, str, str]:
-    source_path = Path(item.audio_file)
+) -> list[_MaterializationItem]:
+    materialization_items: list[_MaterializationItem] = []
+    for review_item in review_manifest.items:
+        label = labels.get(review_item.item_id)
+        if label not in {"target", "noise"}:
+            continue
+        materialization_items.append(
+            _build_materialization_item(
+                review_item_id=review_item.review_item_id or review_item.item_id,
+                source_audio_file=review_item.audio_file,
+                start_s=review_item.start_s,
+                end_s=review_item.end_s,
+                label=label,
+                detection_index=review_item.detection_index,
+                detection_score=review_item.detection_score,
+                source_collection_name=review_item.source_collection_name,
+                source_category_dir=review_item.source_category_dir,
+                source_relative_path=review_item.source_relative_path,
+                source_recording_key=review_item.source_recording_key,
+                payload_json=review_item.payload_json,
+                collection_root=collection_root,
+            )
+        )
+    return materialization_items
 
-    collection_name = item.source_collection_name
-    source_category_dir = item.source_category_dir
-    source_relative_path = item.source_relative_path
-    source_recording_key = item.source_recording_key
 
-    if collection_name is None or source_category_dir is None or source_relative_path is None:
-        resolved_source = source_path.resolve()
-        resolved_root = collection_root.resolve()
-        try:
-            rel = resolved_source.relative_to(resolved_root)
-        except ValueError as exc:
+def _materialization_items_from_curated_export(
+    *,
+    curated_export: CuratedPredictionExportManifest,
+    collection_root: Path,
+) -> list[_MaterializationItem]:
+    materialization_items: list[_MaterializationItem] = []
+    for item in curated_export.items:
+        materialization_items.append(
+            _build_materialization_item(
+                review_item_id=item.review_item_id,
+                source_audio_file=item.source_audio_file,
+                start_s=item.start_s,
+                end_s=item.end_s,
+                label=item.label,
+                detection_index=item.detection_index,
+                detection_score=item.detection_score,
+                source_collection_name=item.source_collection_name
+                or curated_export.source_collection_name,
+                source_category_dir=item.source_category_dir or curated_export.source_category_dir,
+                source_relative_path=item.source_relative_path
+                or curated_export.source_relative_path,
+                source_recording_key=item.source_recording_key
+                or curated_export.source_recording_key,
+                payload_json=item.payload_json,
+                collection_root=collection_root,
+            )
+        )
+    return materialization_items
+
+
+def _build_materialization_item(
+    *,
+    review_item_id: str,
+    source_audio_file: str,
+    start_s: float,
+    end_s: float,
+    label: Literal["target", "noise"],
+    detection_index: int | None,
+    detection_score: float | None,
+    source_collection_name: str | None,
+    source_category_dir: str | None,
+    source_relative_path: str | None,
+    source_recording_key: str | None,
+    payload_json: dict[str, object] | None,
+    collection_root: Path,
+) -> _MaterializationItem:
+    (
+        resolved_collection_name,
+        resolved_category_dir,
+        resolved_relative_path,
+        resolved_display_path,
+        resolved_recording_key,
+    ) = _resolve_source_fields(
+        source_audio_file=source_audio_file,
+        collection_root=collection_root,
+        source_collection_name=source_collection_name,
+        source_category_dir=source_category_dir,
+        source_relative_path=source_relative_path,
+        source_recording_key=source_recording_key,
+        review_item_id=review_item_id,
+    )
+
+    return _MaterializationItem(
+        review_item_id=review_item_id,
+        source_audio_file=source_audio_file,
+        start_s=start_s,
+        end_s=end_s,
+        label=label,
+        detection_index=detection_index,
+        detection_score=detection_score,
+        source_collection_name=resolved_collection_name,
+        source_category_dir=resolved_category_dir,
+        source_relative_path=resolved_relative_path,
+        source_display_path=resolved_display_path,
+        source_recording_key=resolved_recording_key,
+        payload_json=payload_json,
+    )
+
+
+def _resolve_source_fields(
+    *,
+    source_audio_file: str,
+    collection_root: Path,
+    source_collection_name: str | None,
+    source_category_dir: str | None,
+    source_relative_path: str | None,
+    source_recording_key: str | None,
+    review_item_id: str,
+) -> tuple[str, str, str, str, str]:
+    source_path = Path(source_audio_file)
+
+    inferred_collection_name: str | None = None
+    inferred_category_dir: str | None = None
+    inferred_relative_path: str | None = None
+    try:
+        inferred_collection_name, inferred_category_dir, inferred_relative_path = (
+            _infer_source_fields_from_audio_path(
+                source_path=source_path,
+                collection_root=collection_root,
+            )
+        )
+    except ValueError:
+        if (
+            source_collection_name is None
+            or source_category_dir is None
+            or source_relative_path is None
+        ):
             raise ValueError(
-                "Missing source collection metadata for audio outside collection root: "
-                f"{source_path}"
-            ) from exc
-        parts = rel.parts
-        if len(parts) < 3:
-            raise ValueError(
-                "Could not infer source metadata from path under collection root: {}".format(
-                    source_path
+                "Missing source metadata for review item {} and could not infer from {}".format(
+                    review_item_id, source_audio_file
                 )
             )
-        if collection_name is None:
-            collection_name = parts[0]
-        if source_category_dir is None:
-            source_category_dir = parts[1]
-        if source_relative_path is None:
-            source_relative_path = str(rel).replace("\\", "/")
+
+    normalized_collection_name = _normalize_simple_name(
+        source_collection_name,
+        "source_collection_name",
+    )
+    normalized_category_dir = _normalize_simple_name(
+        source_category_dir,
+        "source_category_dir",
+    )
+    normalized_relative_path = _normalize_relative_path(
+        source_relative_path,
+        "source_relative_path",
+    )
+
+    resolved_collection_name = _resolve_or_inferred(
+        supplied=normalized_collection_name,
+        inferred=inferred_collection_name,
+        field_name="source_collection_name",
+        review_item_id=review_item_id,
+    )
+    resolved_category_dir = _resolve_or_inferred(
+        supplied=normalized_category_dir,
+        inferred=inferred_category_dir,
+        field_name="source_category_dir",
+        review_item_id=review_item_id,
+    )
+    resolved_relative_path = _resolve_or_inferred(
+        supplied=normalized_relative_path,
+        inferred=inferred_relative_path,
+        field_name="source_relative_path",
+        review_item_id=review_item_id,
+    )
+
+    _validate_relative_path_shape(
+        source_relative_path=resolved_relative_path,
+        source_collection_name=resolved_collection_name,
+        source_category_dir=resolved_category_dir,
+        review_item_id=review_item_id,
+    )
 
     if source_recording_key is None:
         source_recording_key = _derive_source_recording_key(
-            collection_name=collection_name,
+            collection_name=resolved_collection_name,
             source_path=source_path,
         )
     if source_recording_key is None:
         raise ValueError(
             "Missing source_recording_key for review item {}; provide source_recording_key in "
-            "review manifest item".format(item.item_id)
+            "input manifest".format(review_item_id)
         )
 
-    return collection_name, source_category_dir, source_relative_path, source_recording_key
+    source_display_path = (
+        f"{resolved_collection_name}/{resolved_category_dir}/{resolved_relative_path}"
+    )
+    return (
+        resolved_collection_name,
+        resolved_category_dir,
+        resolved_relative_path,
+        source_display_path,
+        source_recording_key,
+    )
+
+
+def _infer_source_fields_from_audio_path(
+    *,
+    source_path: Path,
+    collection_root: Path,
+) -> tuple[str, str, str]:
+    resolved_source = source_path.resolve()
+    resolved_root = collection_root.resolve()
+    rel = resolved_source.relative_to(resolved_root)
+    parts = rel.parts
+    if len(parts) < 3:
+        raise ValueError(
+            "Could not infer source metadata from path under collection root: {}".format(
+                source_path
+            )
+        )
+
+    collection_name = parts[0]
+    category_dir = parts[1]
+    relative_path = str(PurePosixPath(*parts[2:]))
+    return collection_name, category_dir, relative_path
+
+
+def _normalize_simple_name(value: str | None, field_name: str) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"{field_name} cannot be empty")
+    if "/" in stripped or "\\" in stripped:
+        raise ValueError(f"{field_name} must be a single path segment")
+    return stripped
+
+
+def _normalize_relative_path(value: str | None, field_name: str) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().replace("\\", "/")
+    if not normalized:
+        raise ValueError(f"{field_name} cannot be empty")
+    path = PurePosixPath(normalized)
+    if path.is_absolute():
+        raise ValueError(f"{field_name} must be relative")
+    if any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError(f"{field_name} must not contain empty, '.' or '..' segments")
+    return str(path)
+
+
+def _resolve_or_inferred(
+    *,
+    supplied: str | None,
+    inferred: str | None,
+    field_name: str,
+    review_item_id: str,
+) -> str:
+    if supplied is None and inferred is None:
+        raise ValueError("Missing {} for review item {}".format(field_name, review_item_id))
+    if supplied is not None and inferred is not None and supplied != inferred:
+        raise ValueError(
+            "Conflicting {} for review item {}: supplied='{}' inferred='{}'".format(
+                field_name,
+                review_item_id,
+                supplied,
+                inferred,
+            )
+        )
+    return supplied if supplied is not None else inferred  # type: ignore[return-value]
+
+
+def _validate_relative_path_shape(
+    *,
+    source_relative_path: str,
+    source_collection_name: str,
+    source_category_dir: str,
+    review_item_id: str,
+) -> None:
+    prefixed_with_collection = f"{source_collection_name}/{source_category_dir}/"
+    if source_relative_path.startswith(prefixed_with_collection):
+        raise ValueError(
+            "source_relative_path for review item {} must be relative to '{}' only; "
+            "received collection-prefixed path '{}'".format(
+                review_item_id,
+                source_category_dir,
+                source_relative_path,
+            )
+        )
+    prefixed_with_category = f"{source_category_dir}/"
+    if source_relative_path.startswith(prefixed_with_category):
+        raise ValueError(
+            "source_relative_path for review item {} must be relative to '{}' only; "
+            "received category-prefixed path '{}'".format(
+                review_item_id,
+                source_category_dir,
+                source_relative_path,
+            )
+        )
 
 
 def _derive_source_recording_key(collection_name: str, source_path: Path) -> str | None:
@@ -427,9 +774,9 @@ def _build_curated_example_id(
     *,
     prediction_run_id: str,
     review_session_id: str,
-    item_id: str,
+    review_item_id: str,
 ) -> str:
-    payload = f"{prediction_run_id}|{review_session_id}|{item_id}"
+    payload = f"{prediction_run_id}|{review_session_id}|{review_item_id}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
 
 

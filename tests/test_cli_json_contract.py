@@ -424,7 +424,7 @@ def test_prediction_review_materialize_curated_json_writes_single_json_document(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     api = SimpleNamespace(
-        materialize_curated_prediction_examples=lambda manifest_path, labels_path, destination_root: {
+        materialize_curated_prediction_examples=lambda **_: {
             "curated_source_root": "/datasets/_curated_prediction_examples",
             "manifest_paths": [
                 "/datasets/_curated_prediction_examples/audio_collection_a/run-1/session-1/manifest.json"
@@ -461,6 +461,54 @@ def test_prediction_review_materialize_curated_json_writes_single_json_document(
     payload = json.loads(captured.out)
     assert payload["prediction_run_id"] == "run-1"
     assert payload["counts_by_label"]["target"] == 2
+
+
+def test_prediction_review_materialize_curated_accepts_curated_export_manifest_mode(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    called: dict[str, object] = {}
+
+    def _materialize_curated_prediction_examples(**kwargs: object) -> dict[str, object]:
+        called.update(kwargs)
+        return {
+            "curated_source_root": "/datasets/_curated_prediction_examples",
+            "manifest_paths": [],
+            "prediction_run_id": "run-1",
+            "review_session_id": "session-1",
+            "counts_by_label": {"target": 0, "noise": 0},
+            "created_count": 0,
+            "updated_count": 0,
+            "skipped_count": 0,
+            "total_items": 0,
+            "source_recording_keys": [],
+        }
+
+    api = SimpleNamespace(
+        materialize_curated_prediction_examples=_materialize_curated_prediction_examples
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "prediction-review-materialize-curated",
+            "--curated-export-manifest",
+            "/tmp/curated-export.json",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["prediction_run_id"] == "run-1"
+    assert called["manifest_path"] is None
+    assert called["labels_path"] is None
+    assert called["curated_export_manifest"] == Path("/tmp/curated-export.json")
 
 
 def test_curated_source_status_json_writes_single_json_document(
