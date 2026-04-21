@@ -9,7 +9,10 @@ import soundfile as sf
 from alpaca_pipelines import PipelineAPI
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.io_utils import read_json, write_json
-from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
+from alpaca_pipelines.prediction.review import (
+    CuratedPredictionSourceManifest,
+    PredictionReviewSpectrogramConfig,
+)
 
 
 def _build_api(tmp_path: Path) -> PipelineAPI:
@@ -237,3 +240,164 @@ def test_prediction_review_concat_creates_single_review_wav_without_spectrogram_
     session_dir = concat_path.parent.parent
     assert session_dir.name == "session_concat"
     assert not (session_dir / "items").exists()
+
+
+def test_materialize_curated_prediction_examples_and_status(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(api, audio_file=audio_file)
+
+    manifest_path = tmp_path / "review_manifest_curated.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_curated",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "audio.wav",
+                    "source_recording_key": "401_20250211_075558",
+                }
+            ],
+        },
+    )
+    labels_path = tmp_path / "labels.json"
+    write_json(
+        labels_path,
+        {
+            "schema_version": 1,
+            "labels": {
+                "item_001": "target",
+            },
+        },
+    )
+
+    payload = api.materialize_curated_prediction_examples(
+        manifest_path=manifest_path,
+        labels_path=labels_path,
+    )
+
+    assert payload["counts_by_label"] == {"target": 1, "noise": 0}
+    assert payload["created_count"] == 1
+    assert payload["updated_count"] == 0
+    assert payload["skipped_count"] == 0
+
+    manifest_paths = payload["manifest_paths"]
+    assert len(manifest_paths) == 1
+    curated_manifest = read_json(Path(manifest_paths[0]))
+    CuratedPredictionSourceManifest.model_validate(curated_manifest)
+    assert curated_manifest["source_type"] == "manual_review_curated"
+    assert curated_manifest["items"][0]["label"] == "target"
+    assert Path(curated_manifest["items"][0]["snippet_wav_path"]).is_file()
+
+    second_payload = api.materialize_curated_prediction_examples(
+        manifest_path=manifest_path,
+        labels_path=labels_path,
+    )
+    assert second_payload["created_count"] == 0
+    assert second_payload["updated_count"] == 0
+    assert second_payload["skipped_count"] == 1
+
+    status = api.list_curated_prediction_sources()
+    assert status["counts_by_label"]["target"] == 1
+    assert status["counts_by_provenance_type"]["manual_review_curated"] == 1
+
+
+def test_materialize_curated_prediction_examples_accepts_curated_export_manifest(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    collection_audio = (
+        tmp_path / "collection" / "audio_collection_alpha" / "raw_recordings" / "audio.wav"
+    )
+    _write_test_audio(collection_audio)
+    run_id = _prepare_completed_prediction_run(api, audio_file=collection_audio)
+
+    export_manifest_path = tmp_path / "curated_export_manifest.json"
+    write_json(
+        export_manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "review_session_id": "session_curated",
+            "items": [
+                {
+                    "review_item_id": "item_001",
+                    "source_audio_file": str(collection_audio),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                    "label": "target",
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "audio.wav",
+                    "source_recording_key": "401_20250211_075558",
+                }
+            ],
+        },
+    )
+
+    payload = api.materialize_curated_prediction_examples(
+        curated_export_manifest=export_manifest_path
+    )
+
+    assert payload["counts_by_label"] == {"target": 1, "noise": 0}
+    curated_manifest = read_json(Path(payload["manifest_paths"][0]))
+    assert curated_manifest["source_relative_path"] == "audio.wav"
+    assert (
+        curated_manifest["source_display_path"] == "audio_collection_alpha/raw_recordings/audio.wav"
+    )
+    assert (
+        curated_manifest["items"][0]["source_display_path"]
+        == "audio_collection_alpha/raw_recordings/audio.wav"
+    )
+
+
+def test_materialize_curated_prediction_examples_rejects_collection_prefixed_relative_path(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    collection_audio = (
+        tmp_path / "collection" / "audio_collection_alpha" / "raw_recordings" / "audio.wav"
+    )
+    _write_test_audio(collection_audio)
+    run_id = _prepare_completed_prediction_run(api, audio_file=collection_audio)
+
+    manifest_path = tmp_path / "review_manifest_curated.json"
+    labels_path = tmp_path / "labels.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_curated",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(collection_audio),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "audio_collection_alpha/raw_recordings/audio.wav",
+                    "source_recording_key": "401_20250211_075558",
+                }
+            ],
+        },
+    )
+    write_json(labels_path, {"schema_version": 1, "labels": {"item_001": "target"}})
+
+    with pytest.raises(ValueError, match="source_relative_path"):
+        api.materialize_curated_prediction_examples(
+            manifest_path=manifest_path,
+            labels_path=labels_path,
+        )

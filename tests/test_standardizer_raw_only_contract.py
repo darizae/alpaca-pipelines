@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pytest
+import soundfile as sf
 
 from alpaca_pipelines.collections.contracts import IdentityMap
 from alpaca_pipelines.collections.fs import LocalFS
@@ -49,6 +51,13 @@ def _source_recording(
         wav_path=wav_path,
         csv_path=csv_path,
     )
+
+
+def _write_wav(path: Path, duration_s: float = 0.5, sample_rate: int = 16_000) -> None:
+    t = np.linspace(0.0, duration_s, int(sample_rate * duration_s), endpoint=False)
+    audio = (0.1 * np.sin(2.0 * np.pi * 220.0 * t)).astype(np.float32)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sf.write(path, audio, sample_rate)
 
 
 def test_scan_root_reports_explicit_status_matrix(tmp_path: Path) -> None:
@@ -320,6 +329,8 @@ def test_dataset_build_fails_when_target_pool_is_empty(tmp_path: Path) -> None:
             "recordings": [],
         },
     )
+    (collection_root / "audio_collection_raw" / "raw_recordings").mkdir(parents=True)
+    _write_wav(collection_root / "audio_collection_raw" / "raw_recordings" / "dummy.wav")
 
     strategy_config = StrategyConfig.model_validate(
         {
@@ -414,3 +425,153 @@ def test_dataset_build_filters_target_collections_before_positive_selection(
             merged_index_path=merged_index_path,
             datasets_root=datasets_root,
         )
+
+
+def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_noise(
+    tmp_path: Path,
+) -> None:
+    collection_root = tmp_path / "collection"
+    datasets_root = tmp_path / "datasets"
+    merged_index_path = collection_root / "merged_index.json"
+    collection_root.mkdir()
+    datasets_root.mkdir()
+    write_json(
+        merged_index_path,
+        {
+            "meta": {"n_collections": 0},
+            "entries": [],
+            "recordings": [],
+        },
+    )
+    (collection_root / "audio_collection_raw" / "raw_recordings").mkdir(parents=True)
+    _write_wav(collection_root / "audio_collection_raw" / "raw_recordings" / "dummy.wav")
+
+    curated_root = datasets_root / "_curated_prediction_examples"
+    curated_session_dir = curated_root / "audio_collection_alpha" / "run-1" / "session-1"
+    snippets_dir = curated_session_dir / "snippets"
+    target_wav = snippets_dir / "target_item.wav"
+    noise_wav = snippets_dir / "noise_item.wav"
+    _write_wav(target_wav, duration_s=0.4)
+    _write_wav(noise_wav, duration_s=0.4)
+    write_json(
+        curated_session_dir / "manifest.json",
+        {
+            "schema_version": 1,
+            "source_type": "manual_review_curated",
+            "collection_name": "audio_collection_alpha",
+            "source_category_dir": "raw_recordings",
+            "source_relative_path": "401_20250211_075558.WAV",
+            "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+            "source_recording_key": "401_20250211_075558",
+            "source_audio_file": str(
+                collection_root
+                / "audio_collection_alpha"
+                / "raw_recordings"
+                / "401_20250211_075558.WAV"
+            ),
+            "prediction_run_id": "run-1",
+            "review_session_id": "session-1",
+            "created_at": "2026-04-17T08:00:00Z",
+            "items": [
+                {
+                    "curated_example_id": "a",
+                    "review_item_id": "item-target",
+                    "detection_index": 0,
+                    "start_s": 0.1,
+                    "end_s": 0.5,
+                    "duration_s": 0.4,
+                    "detection_score": 0.8,
+                    "label": "target",
+                    "snippet_wav_path": str(target_wav),
+                    "source_recording_key": "401_20250211_075558",
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "401_20250211_075558.WAV",
+                    "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+                    "source_audio_file": str(
+                        collection_root
+                        / "audio_collection_alpha"
+                        / "raw_recordings"
+                        / "401_20250211_075558.WAV"
+                    ),
+                    "prediction_run_id": "run-1",
+                    "review_session_id": "session-1",
+                    "provenance_type": "manual_review_curated",
+                    "payload_json": None,
+                },
+                {
+                    "curated_example_id": "b",
+                    "review_item_id": "item-noise",
+                    "detection_index": 1,
+                    "start_s": 1.1,
+                    "end_s": 1.5,
+                    "duration_s": 0.4,
+                    "detection_score": 0.2,
+                    "label": "noise",
+                    "snippet_wav_path": str(noise_wav),
+                    "source_recording_key": "401_20250211_075558",
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "401_20250211_075558.WAV",
+                    "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+                    "source_audio_file": str(
+                        collection_root
+                        / "audio_collection_alpha"
+                        / "raw_recordings"
+                        / "401_20250211_075558.WAV"
+                    ),
+                    "prediction_run_id": "run-1",
+                    "review_session_id": "session-1",
+                    "provenance_type": "manual_review_curated",
+                    "payload_json": None,
+                },
+            ],
+        },
+    )
+
+    strategy_config = StrategyConfig.model_validate(
+        {
+            "target_collection_names": ["audio_collection_ready"],
+            "noise_collection_names": ["audio_collection_raw"],
+            "split_strategy": "random",
+            "seed": 42,
+            "min_quality": 2,
+            "noise_per_positive": 0.0,
+            "noise_mining": {
+                "attempts_per_slot": 1,
+                "source_category_dirs": ["raw_recordings"],
+                "low_quality_as_negative": False,
+                "low_quality_threshold": 1,
+            },
+            "split_fractions": [0.7, 0.15, 0.15],
+            "duration_tolerance_s": 0.1,
+            "review_gap_s": 0.5,
+            "freq_low_hz": 0,
+            "freq_high_hz": 4000,
+            "include_manual_review_curated": True,
+            "manual_review_curated_filters": {
+                "collection_names": ["audio_collection_alpha"],
+                "labels": ["target", "noise"],
+                "prediction_run_ids": ["run-1"],
+                "source_recording_keys": ["401_20250211_075558"],
+            },
+        }
+    )
+
+    result = build_dataset(
+        strategy_name="dataset_with_curated",
+        strategy_config=strategy_config,
+        collection_root=collection_root,
+        merged_index_path=merged_index_path,
+        datasets_root=datasets_root,
+    )
+
+    assert result.n_target == 1
+    assert result.n_noise == 1
+    assert result.curated_summary["curated_selected"] == 2
+    assert result.manifest.meta.provenance_summary is not None
+    assert result.manifest.meta.provenance_summary["by_provenance_type"] == {
+        "manual_review_curated": 2
+    }
+    assert result.manifest.meta.manual_curation_summary is not None
+    assert result.manifest.meta.manual_curation_summary["total_examples"] == 2

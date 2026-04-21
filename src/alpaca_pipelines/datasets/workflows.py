@@ -11,6 +11,7 @@ from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.index_reader import IndexPayload, load_merged_index
 from alpaca_pipelines.datasets.io_utils import read_json, write_csv_rows
 from alpaca_pipelines.datasets.manifest import (
+    _build_provenance_summaries,
     _compute_entries_hash,
     build_manifest,
     load_manifest,
@@ -24,12 +25,14 @@ from alpaca_pipelines.datasets.paths import (
 )
 from alpaca_pipelines.datasets.review.apply_review import apply_review_table
 from alpaca_pipelines.datasets.review.concatenate import prepare_review_artifacts
+from alpaca_pipelines.datasets.selection.select_curated import select_curated_examples
 from alpaca_pipelines.datasets.selection.select_positives import (
     select_low_quality_as_negatives,
     select_positives,
 )
 from alpaca_pipelines.datasets.source_discovery import discover_source_files
 from alpaca_pipelines.datasets.splitting.strategies import apply_split
+from alpaca_pipelines.prediction.review.curated import curated_sources_root
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,7 @@ class BuildResult:
     n_target: int
     n_noise: int
     splits: dict[str, int]
+    curated_summary: dict[str, int | str | bool]
 
 
 @dataclass(frozen=True)
@@ -114,9 +118,33 @@ def build_dataset(
         duration_tolerance_s=strategy_config.duration_tolerance_s,
         fs=fs,
     )
-    if not positive_snippets:
+    curated_summary: dict[str, int | str | bool] = {
+        "curated_candidates": 0,
+        "curated_selected": 0,
+        "curated_deduped": 0,
+        "curated_duplicates_removed": 0,
+        "curated_dedupe_key_policy": "source_recording_key|round(start_s,6)|round(end_s,6)|label",
+        "curated_duplicates_crossed_source_manifests": False,
+    }
+    curated_snippets: list[SnippetEntry] = []
+    if strategy_config.include_manual_review_curated:
+        curated_snippets, curated_summary = select_curated_examples(
+            curated_root=curated_sources_root(datasets_root=datasets_root),
+            snippets_dir=snippets_dir,
+            uid_counter=uid_counter,
+            filters=strategy_config.manual_review_curated_filters.model_dump(),
+            max_examples=strategy_config.manual_review_curated_max_examples,
+            seed=strategy_config.seed,
+            fs=fs,
+        )
+
+    all_positive_snippets = [
+        *positive_snippets,
+        *[snippet for snippet in curated_snippets if snippet.classification == "target"],
+    ]
+    if not all_positive_snippets:
         raise ValueError(
-            "Dataset build requires labelled target hums, but the target pool is empty."
+            "Dataset build requires labelled target examples, but the target pool is empty."
         )
 
     low_quality_negatives: list[SnippetEntry] = []
@@ -140,7 +168,7 @@ def build_dataset(
     )
 
     mined_negatives = mine_negatives_for_positives(
-        positive_snippets=positive_snippets,
+        positive_snippets=all_positive_snippets,
         source_files=source_files,
         noise_per_positive=strategy_config.noise_per_positive,
         attempts_per_slot=strategy_config.noise_mining.attempts_per_slot,
@@ -150,7 +178,16 @@ def build_dataset(
         fs=fs,
     )
 
-    all_snippets = [*positive_snippets, *low_quality_negatives, *mined_negatives]
+    curated_noise_snippets = [
+        snippet for snippet in curated_snippets if snippet.classification == "noise"
+    ]
+
+    all_snippets = [
+        *all_positive_snippets,
+        *curated_noise_snippets,
+        *low_quality_negatives,
+        *mined_negatives,
+    ]
 
     split_result = apply_split(
         snippets=all_snippets,
@@ -190,6 +227,7 @@ def build_dataset(
         n_target=manifest.meta.n_target,
         n_noise=manifest.meta.n_noise,
         splits=split_counts,
+        curated_summary=curated_summary,
     )
 
 
@@ -302,9 +340,16 @@ def _regenerate_split_csvs(dataset_dir: Path, manifest: Manifest, fs: FileSystem
 
 def _recompute_manifest_hash(manifest: Manifest) -> Manifest:
     new_hash = _compute_entries_hash(manifest.snippets, manifest.recordings)
+    provenance_summary, manual_curation_summary = _build_provenance_summaries(manifest.snippets)
     return manifest.model_copy(
         update={
-            "meta": manifest.meta.model_copy(update={"manifest_hash": new_hash}),
+            "meta": manifest.meta.model_copy(
+                update={
+                    "manifest_hash": new_hash,
+                    "provenance_summary": provenance_summary,
+                    "manual_curation_summary": manual_curation_summary,
+                }
+            ),
         }
     )
 

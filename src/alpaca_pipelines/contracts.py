@@ -53,9 +53,15 @@ class MergedIndex(BaseModel):
 
 
 Classification = Literal["target", "noise"]
-SourceType = Literal["hum", "mined_source", "low_quality_hum"]
+SourceType = Literal["hum", "mined_source", "low_quality_hum", "manual_review_curated"]
 ReviewStatus = Literal["pending", "approved", "rejected"]
 SplitName = Literal["train", "val", "test"]
+ProvenanceType = Literal[
+    "indexed_hum",
+    "indexed_clip",
+    "manual_review_curated",
+    "raw_negative_source",
+]
 
 
 class ManifestSnippet(BaseModel):
@@ -85,6 +91,16 @@ class ManifestSnippet(BaseModel):
     snippet_gps_status: str | None = None
     split: SplitName | None = None
     review_status: ReviewStatus = "pending"
+    provenance_type: ProvenanceType | None = None
+    curated_label: Classification | None = None
+    source_collection_name: str | None = None
+    source_category_dir: str | None = None
+    source_relative_path: str | None = None
+    source_display_path: str | None = None
+    source_prediction_run_id: str | None = None
+    source_review_session_id: str | None = None
+    source_review_item_id: str | None = None
+    source_curated_example_id: str | None = None
 
 
 class ManifestMeta(BaseModel):
@@ -102,6 +118,8 @@ class ManifestMeta(BaseModel):
     n_recordings_with_sidecar: int = 0
     manifest_hash: str = ""
     strategy_config: dict[str, Any] | None = None
+    provenance_summary: dict[str, dict[str, int] | int] | None = None
+    manual_curation_summary: dict[str, dict[str, int] | int] | None = None
 
 
 class DatasetManifest(BaseModel):
