@@ -1,0 +1,217 @@
+{
+  "$defs": {
+    "CuratedPredictionExportItem": {
+      "additionalProperties": false,
+      "properties": {
+        "review_item_id": {
+          "title": "Review Item Id",
+          "type": "string"
+        },
+        "source_audio_file": {
+          "title": "Source Audio File",
+          "type": "string"
+        },
+        "start_s": {
+          "title": "Start S",
+          "type": "number"
+        },
+        "end_s": {
+          "title": "End S",
+          "type": "number"
+        },
+        "label": {
+          "enum": [
+            "target",
+            "noise"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "detection_index": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detection Index"
+        },
+        "detection_score": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detection Score"
+        },
+        "source_collection_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Collection Name"
+        },
+        "source_category_dir": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Category Dir"
+        },
+        "source_relative_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Relative Path"
+        },
+        "source_recording_key": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Recording Key"
+        },
+        "payload_json": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Payload Json"
+        }
+      },
+      "required": [
+        "review_item_id",
+        "source_audio_file",
+        "start_s",
+        "end_s",
+        "label"
+      ],
+      "title": "CuratedPredictionExportItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "prediction_run_id": {
+      "title": "Prediction Run Id",
+      "type": "string"
+    },
+    "review_session_id": {
+      "title": "Review Session Id",
+      "type": "string"
+    },
+    "source_collection_name": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Collection Name"
+    },
+    "source_category_dir": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Category Dir"
+    },
+    "source_relative_path": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Relative Path"
+    },
+    "source_recording_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Recording Key"
+    },
+    "source_audio_file": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Audio File"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/CuratedPredictionExportItem"
+      },
+      "title": "Items",
+      "type": "array"
+    }
+  },
+  "required": [
+    "prediction_run_id",
+    "review_session_id"
+  ],
+  "title": "CuratedPredictionExportManifest",
+  "type": "object"
+}

@@ -39,6 +39,11 @@ class StrategyConfig(BaseModel):
     review_gap_s: float = 0.5
     freq_low_hz: int = 0
     freq_high_hz: int = 4000
+    include_manual_review_curated: bool = False
+    manual_review_curated_filters: ManualReviewCuratedFilters = Field(
+        default_factory=lambda: ManualReviewCuratedFilters()
+    )
+    manual_review_curated_max_examples: int | None = None
 
     @model_validator(mode="after")
     def _validate_split_fractions(self) -> StrategyConfig:
@@ -81,6 +86,9 @@ class StrategyConfig(BaseModel):
             raise ValueError(
                 f"Split fractions must sum to ~1.0, got {total:.4f} from {self.split_fractions}"
             )
+        if self.manual_review_curated_max_examples is not None:
+            if self.manual_review_curated_max_examples <= 0:
+                raise ValueError("manual_review_curated_max_examples must be > 0")
         return self
 
 
@@ -89,6 +97,15 @@ class DatasetBuildConfig(BaseModel):
 
     active_strategies: list[str]
     strategies: dict[str, StrategyConfig]
+
+
+class ManualReviewCuratedFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    collection_names: list[str] = Field(default_factory=list)
+    labels: list[str] = Field(default_factory=list)
+    prediction_run_ids: list[str] = Field(default_factory=list)
+    source_recording_keys: list[str] = Field(default_factory=list)
 
 
 def _is_safe_path_segment(value: str) -> bool:
