@@ -127,6 +127,12 @@ def export_detections_to_selection_table(
     return output_path
 
 
+def _count_exported_detections(detections: list[dict[str, Any]], use_rf_filtered: bool) -> int:
+    if not use_rf_filtered:
+        return len(detections)
+    return sum(1 for detection in detections if detection.get("rf_pass", True))
+
+
 def export_prediction_run_selection_tables(
     predictions_dir: Path,
     selection_tables_dir: Path,
@@ -179,6 +185,7 @@ def export_prediction_run_selection_tables(
     selection_tables_dir.mkdir(parents=True, exist_ok=True)
 
     exported: list[dict[str, Any]] = []
+    total_exported_detections = 0
     for audio_file, stem in zip(audio_files, stems, strict=True):
         suffix = "_rf_filtered" if use_rf_filtered else ""
         prediction_json_path = predictions_dir / "{}{}.json".format(stem, suffix)
@@ -197,6 +204,14 @@ def export_prediction_run_selection_tables(
             freq_high_hz=freq_high_hz,
             use_rf_filtered=use_rf_filtered,
         )
+        prediction_data = read_json(prediction_json_path)
+        detections = prediction_data.get("detections", [])
+        if not isinstance(detections, list):
+            raise ValueError(
+                "Predictions payload missing 'detections' list: {}".format(prediction_json_path)
+            )
+        n_exported_detections = _count_exported_detections(detections, use_rf_filtered)
+        total_exported_detections += n_exported_detections
 
         exported.append(
             {
@@ -204,6 +219,7 @@ def export_prediction_run_selection_tables(
                 "audio_file_stem": stem,
                 "predictions_json": str(prediction_json_path),
                 "selection_table": str(output_path),
+                "n_exported_detections": n_exported_detections,
             }
         )
 
@@ -214,6 +230,8 @@ def export_prediction_run_selection_tables(
         "use_rf_filtered": use_rf_filtered,
         "freq_low_hz": freq_low_hz,
         "freq_high_hz": freq_high_hz,
+        "source_mode": "rf_filtered" if use_rf_filtered else "base",
+        "n_exported_detections": total_exported_detections,
         "n_files": len(exported),
         "files": exported,
     }
