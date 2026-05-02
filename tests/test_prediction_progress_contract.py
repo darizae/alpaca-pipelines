@@ -203,3 +203,38 @@ def test_prediction_progress_stage_includes_rf_filtering(
         "writing_summary",
         "completed",
     ]
+
+
+def test_prediction_summary_includes_rf_filter_summary(monkeypatch: Any, tmp_path: Path) -> None:
+    environment = _build_environment(tmp_path)
+    run_manager = RunManager(environment.runs_root)
+    run_state = run_manager.create_run(
+        "prediction",
+        _prediction_spec(apply_rf_filter=True),
+    )
+    _install_prediction_stubs(monkeypatch, with_rf_filter=False)
+    monkeypatch.setattr(
+        "alpaca_pipelines.rf.executor.apply_rf_filter",
+        lambda **_kwargs: {
+            "applied": True,
+            "rf_model_path": "/models/rf.joblib",
+            "rf_threshold": 0.4,
+            "base_detections": 3,
+            "rf_passed": 2,
+            "rf_rejected": 1,
+            "rf_unscored": 0,
+            "rejection_rate": 0.333333,
+            "pass_rate": 0.666667,
+            "files": [],
+        },
+    )
+
+    prediction_executor.execute_prediction(run_state, environment, run_manager)
+
+    summary = read_json(
+        Path(run_state.run_dir) / "outputs" / "predictions" / "prediction_summary.json"
+    )
+    assert summary["total_detections"] == 3
+    assert summary["rf_filtered"] is True
+    assert summary["rf_filter_summary"]["rf_passed"] == 2
+    assert summary["rf_filter_summary"]["rf_rejected"] == 1

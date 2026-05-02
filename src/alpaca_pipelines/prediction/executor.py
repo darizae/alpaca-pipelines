@@ -403,12 +403,13 @@ def execute_prediction(
                 detections_so_far=total_detections,
             )
 
+        rf_filter_summary: dict[str, Any] | None = None
         if spec.apply_rf_filter and spec.rf_model_path is not None:
             _emit_prediction_progress(force=True, stage="rf_filtering")
             prediction_logger.info("Applying RF filter (post-processing)")
             from alpaca_pipelines.rf.executor import apply_rf_filter
 
-            apply_rf_filter(
+            rf_filter_summary = apply_rf_filter(
                 prediction_inputs=prediction_inputs,
                 rf_model_path=spec.rf_model_path,
                 rf_threshold=spec.rf_threshold,
@@ -432,6 +433,7 @@ def execute_prediction(
             "n_files": len(audio_files),
             "total_detections": total_detections,
             "detection_threshold": spec.detection_threshold,
+            "rf_filtered": bool(rf_filter_summary),
             "files": [
                 {
                     "audio_file": r["audio_file"],
@@ -441,6 +443,8 @@ def execute_prediction(
                 for r in all_results
             ],
         }
+        if rf_filter_summary is not None:
+            summary["rf_filter_summary"] = rf_filter_summary
         write_json(predictions_dir / "prediction_summary.json", summary)
 
         prediction_logger.info(

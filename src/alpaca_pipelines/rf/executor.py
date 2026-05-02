@@ -83,7 +83,7 @@ def apply_rf_filter(
     rf_threshold: float,
     rf_feature_config: dict[str, Any] | None,
     prediction_logger: logging.Logger,
-) -> None:
+) -> dict[str, Any]:
     rf_model = _load_rf_model(rf_model_path)
     metadata = _load_rf_model_metadata(rf_model_path)
     _validate_rf_metadata_contract(metadata)
@@ -100,6 +100,12 @@ def apply_rf_filter(
     _validate_no_legacy_cnn_feature(feature_names=feature_names)
 
     prediction_logger.info("RF model loaded from: {}".format(rf_model_path))
+
+    file_summaries: list[dict[str, Any]] = []
+    total_base = 0
+    total_passed = 0
+    total_rejected = 0
+    total_unscored = 0
 
     for item in prediction_inputs:
         audio_file = item["audio_file"]
@@ -124,6 +130,19 @@ def apply_rf_filter(
             filtered_data["rf_threshold"] = rf_threshold
             filtered_path = prediction_file.with_name(f"{prediction_file.stem}_rf_filtered.json")
             write_json(filtered_path, filtered_data)
+            file_summaries.append(
+                {
+                    "audio_file": audio_file,
+                    "prediction_file": str(prediction_file),
+                    "rf_filtered_file": str(filtered_path),
+                    "base_detections": 0,
+                    "rf_passed": 0,
+                    "rf_rejected": 0,
+                    "rf_unscored": 0,
+                    "rejection_rate": 0.0,
+                    "pass_rate": 0.0,
+                }
+            )
             prediction_logger.info(
                 "RF filter {}: 0/0 detections passed".format(Path(audio_file).name)
             )
@@ -201,8 +220,47 @@ def apply_rf_filter(
         write_json(filtered_path, filtered_data)
 
         n_passed = sum(1 for d in filtered_detections if d.get("rf_pass", False))
+        n_unscored = sum(1 for d in filtered_detections if d.get("rf_score") is None)
+        n_rejected = sum(
+            1
+            for d in filtered_detections
+            if not d.get("rf_pass", False) and d.get("rf_score") is not None
+        )
+        base_detections = len(filtered_detections)
+        total_base += base_detections
+        total_passed += n_passed
+        total_rejected += n_rejected
+        total_unscored += n_unscored
+        file_summaries.append(
+            {
+                "audio_file": audio_file,
+                "prediction_file": str(prediction_file),
+                "rf_filtered_file": str(filtered_path),
+                "base_detections": base_detections,
+                "rf_passed": n_passed,
+                "rf_rejected": n_rejected,
+                "rf_unscored": n_unscored,
+                "rejection_rate": round(n_rejected / base_detections, 6)
+                if base_detections
+                else 0.0,
+                "pass_rate": round(n_passed / base_detections, 6) if base_detections else 0.0,
+            }
+        )
         prediction_logger.info(
             "RF filter {}: {}/{} detections passed".format(
                 Path(audio_file).name, n_passed, len(filtered_detections)
             )
         )
+
+    return {
+        "applied": True,
+        "rf_model_path": rf_model_path,
+        "rf_threshold": rf_threshold,
+        "base_detections": total_base,
+        "rf_passed": total_passed,
+        "rf_rejected": total_rejected,
+        "rf_unscored": total_unscored,
+        "rejection_rate": round(total_rejected / total_base, 6) if total_base else 0.0,
+        "pass_rate": round(total_passed / total_base, 6) if total_base else 0.0,
+        "files": file_summaries,
+    }
