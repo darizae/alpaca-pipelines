@@ -222,7 +222,7 @@ def execute_rf_training(
         )
 
         val_probabilities = model.predict_proba(x_val)
-        val_predictions = (val_probabilities[:, 1] >= 0.5).astype(np.int64)
+        val_predictions = (val_probabilities[:, 1] >= spec.rf_threshold).astype(np.int64)
 
         accuracy = float(accuracy_score(y_val, val_predictions))
         f1 = float(f1_score(y_val, val_predictions, zero_division=0))
@@ -248,6 +248,7 @@ def execute_rf_training(
         metadata = {
             "feature_family": "rf_v1",
             "feature_names": feature_names,
+            "rf_threshold": spec.rf_threshold,
             "feature_config": spec.feature_config.model_dump(),
         }
         write_json(model_dir / "rf_model_metadata.json", metadata)
@@ -274,6 +275,7 @@ def execute_rf_training(
                 "feature_names": feature_names,
             },
             "feature_family": "rf_v1",
+            "rf_threshold": spec.rf_threshold,
             "feature_config": spec.feature_config.model_dump(),
             "hyperparameters": {
                 "n_estimators": spec.n_estimators,

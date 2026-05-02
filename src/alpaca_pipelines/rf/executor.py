@@ -112,7 +112,20 @@ def apply_rf_filter(
 
         prediction_data = read_json(prediction_file)
         detections = prediction_data.get("detections", [])
+        if not isinstance(detections, list):
+            raise ValueError(
+                "Prediction payload must contain a list of detections: {}".format(prediction_file)
+            )
         if not detections:
+            filtered_data = dict(prediction_data)
+            filtered_data["rf_filtered"] = True
+            filtered_data["rf_model_path"] = rf_model_path
+            filtered_data["rf_threshold"] = rf_threshold
+            filtered_path = prediction_file.with_name(f"{prediction_file.stem}_rf_filtered.json")
+            write_json(filtered_path, filtered_data)
+            prediction_logger.info(
+                "RF filter {}: 0/0 detections passed".format(Path(audio_file).name)
+            )
             continue
 
         signal, file_sample_rate = _load_audio_signal(audio_file)

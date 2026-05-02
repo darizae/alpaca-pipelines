@@ -190,3 +190,32 @@ def test_prediction_spec_dataset_mode_requires_rf_model_path_when_rf_filter_enab
             dataset_name="dataset_a",
             apply_rf_filter=True,
         )
+
+
+def test_prediction_spec_accepts_upstream_run_provenance_fields() -> None:
+    spec = PredictionRunSpec(
+        training_run_id="training-run-1",
+        model_path="/models/final.pt",
+        mode="dataset",
+        dataset_name="dataset_a",
+        apply_rf_filter=True,
+        rf_training_run_id="rf-training-run-1",
+        rf_model_path="/models/rf.joblib",
+    )
+
+    assert spec.training_run_id == "training-run-1"
+    assert spec.rf_training_run_id == "rf-training-run-1"
+
+
+def test_prediction_spec_rejects_rf_training_run_id_when_rf_filter_disabled() -> None:
+    with pytest.raises(
+        ValueError,
+        match="rf_training_run_id must be null when apply_rf_filter is disabled",
+    ):
+        PredictionRunSpec(
+            training_run_id="training-run-1",
+            model_path="/models/final.pt",
+            mode="dataset",
+            dataset_name="dataset_a",
+            rf_training_run_id="rf-training-run-1",
+        )

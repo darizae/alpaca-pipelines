@@ -192,6 +192,7 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
     model_dir = Path(run_state.run_dir) / "outputs" / "model"
     metadata = read_json(model_dir / "rf_model_metadata.json")
     assert metadata["feature_family"] == "rf_v1"
+    assert metadata["rf_threshold"] == 0.4
     assert metadata["feature_config"] == RfFeatureConfig().model_dump()
     assert metadata["feature_names"] == ["Dur 90% (s)", "mfcc1_mean"]
 
@@ -199,7 +200,70 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
         Path(run_state.run_dir) / "outputs" / "summaries" / "rf_training_report.json"
     )
     assert report["feature_family"] == "rf_v1"
+    assert report["rf_threshold"] == 0.4
     assert report["feature_config"] == RfFeatureConfig().model_dump()
+
+
+def test_rf_training_uses_configured_threshold_for_validation_metrics(
+    monkeypatch: Any,
+    tmp_path: Path,
+) -> None:
+    environment = _environment(tmp_path)
+    (environment.datasets_root / "dataset-a").mkdir(parents=True)
+    run_manager = RunManager(environment.runs_root)
+    run_state = run_manager.create_run(
+        "rf_training",
+        {"dataset_name": "dataset-a", "rf_threshold": 0.7},
+    )
+
+    monkeypatch.setattr(
+        rf_training_executor,
+        "load_dataset_handle",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            splits=SimpleNamespace(train=["a.wav", "b.wav"], val=["c.wav", "d.wav"]),
+            class_to_index={"noise": 0, "target": 1},
+            classes=["noise", "target"],
+        ),
+    )
+
+    def _build_feature_table_stub(**_kwargs: Any) -> tuple[pd.DataFrame, np.ndarray, list[str]]:
+        table = pd.DataFrame(
+            [
+                {"Dur 90% (s)": 0.1, "mfcc1_mean": 1.0},
+                {"Dur 90% (s)": 0.2, "mfcc1_mean": 2.0},
+            ]
+        )
+        labels = np.asarray([1, 0], dtype=np.int64)
+        return table, labels, ["x.wav", "y.wav"]
+
+    class _StubModel:
+        feature_names_in_ = np.asarray(["Dur 90% (s)", "mfcc1_mean"], dtype=object)
+
+        def fit(self, _x: pd.DataFrame, _y: np.ndarray) -> None:
+            return
+
+        def predict_proba(self, _x: pd.DataFrame) -> np.ndarray:
+            return np.asarray([[0.35, 0.65], [0.45, 0.55]], dtype=np.float64)
+
+    class _Logger:
+        def info(self, _message: str) -> None:
+            return
+
+    monkeypatch.setattr(rf_training_executor, "_build_feature_table", _build_feature_table_stub)
+    monkeypatch.setattr(
+        rf_training_executor, "RandomForestClassifier", lambda **_kwargs: _StubModel()
+    )
+    monkeypatch.setattr(rf_training_executor, "create_logger", lambda *args, **kwargs: _Logger())
+    monkeypatch.setattr(joblib, "dump", lambda _model, path: path.write_bytes(b""))
+
+    completed = rf_training_executor.execute_rf_training(run_state, environment, run_manager)
+    assert completed.status == "completed"
+
+    report = read_json(
+        Path(run_state.run_dir) / "outputs" / "summaries" / "rf_training_report.json"
+    )
+    assert report["rf_threshold"] == 0.7
+    assert report["metrics"]["f1"] == 0.0
 
 
 def test_rf_filter_reads_exact_prediction_paths_from_prediction_executor(tmp_path: Path) -> None:
@@ -260,6 +324,55 @@ def test_rf_filter_reads_exact_prediction_paths_from_prediction_executor(tmp_pat
     assert filtered["rf_filtered"] is True
     assert filtered["detections"][0]["rf_score"] is not None
     assert isinstance(filtered["detections"][0]["rf_pass"], bool)
+
+
+def test_rf_filter_writes_filtered_artifact_for_empty_detection_files(tmp_path: Path) -> None:
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir(parents=True)
+    model_path = model_dir / "rf_model.joblib"
+    joblib.dump(_PredictCalledModel(), model_path)
+    write_json(
+        model_dir / "rf_model_metadata.json",
+        {
+            "feature_family": "rf_v1",
+            "feature_names": ["mfcc1_mean"],
+            "feature_config": RfFeatureConfig().model_dump(),
+        },
+    )
+
+    prediction_path = tmp_path / "predictions" / "audio.json"
+    write_json(
+        prediction_path,
+        {
+            "audio_file": str(audio_file),
+            "n_windows": 0,
+            "n_detections": 0,
+            "detections": [],
+            "scores_shape": [0, 0],
+        },
+    )
+
+    apply_rf_filter(
+        prediction_inputs=[
+            {
+                "audio_file": str(audio_file),
+                "prediction_file": str(prediction_path),
+            }
+        ],
+        rf_model_path=str(model_path),
+        rf_threshold=0.4,
+        rf_feature_config=None,
+        prediction_logger=logging.getLogger("test-rf-empty"),
+    )
+
+    filtered = read_json(prediction_path.with_name("audio_rf_filtered.json"))
+    assert filtered["detections"] == []
+    assert filtered["rf_filtered"] is True
+    assert filtered["rf_model_path"] == str(model_path)
+    assert filtered["rf_threshold"] == 0.4
 
 
 def test_rf_filter_rejects_legacy_cnn_logit_models(tmp_path: Path) -> None:

@@ -31,6 +31,7 @@ class RfTrainingRunSpec(BaseModel):
     max_features: Literal["sqrt", "log2"] | float | int | None = "sqrt"
     class_weight: Literal["balanced", "balanced_subsample"] | dict[str, float] | None = "balanced"
     n_jobs: int = -1
+    rf_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
     feature_config: RfFeatureConfig = Field(default_factory=RfFeatureConfig)
 
     def to_spec_dict(self) -> dict[str, Any]:
