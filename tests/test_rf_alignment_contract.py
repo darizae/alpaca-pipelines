@@ -16,6 +16,7 @@ from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.prediction.executor import _prediction_output_path
 from alpaca_pipelines.rf.audio_features import mfcc_summary, raven_robust_features
+from alpaca_pipelines.rf.audio_preprocess import prepare_rf_segment
 from alpaca_pipelines.rf.config import RfFeatureConfig
 from alpaca_pipelines.rf.executor import apply_rf_filter
 from alpaca_pipelines.rf_training import executor as rf_training_executor
@@ -71,22 +72,25 @@ def _feature_row(
 ) -> dict[str, float]:
     signal, sample_rate = _mono_signal(audio_file)
     window_end_s = float(len(signal)) / float(sample_rate) if end_s is None else end_s
+    segment, rf_sr = prepare_rf_segment(
+        signal=signal,
+        source_sr=sample_rate,
+        t0=start_s,
+        t1=window_end_s,
+        config=feature_config,
+    )
     return {
         **raven_robust_features(
-            y=signal,
-            sr=sample_rate,
-            t0=start_s,
-            t1=window_end_s,
+            y=segment,
+            sr=rf_sr,
             fmin=feature_config.fmin_hz,
             fmax=feature_config.fmax_hz,
             n_fft=feature_config.n_fft,
             hop_length=feature_config.hop_length,
         ),
         **mfcc_summary(
-            y=signal,
-            sr=sample_rate,
-            t0=start_s,
-            t1=window_end_s,
+            y=segment,
+            sr=rf_sr,
             n_mfcc=feature_config.n_mfcc,
             n_fft=feature_config.n_fft,
             hop_length=feature_config.hop_length,
@@ -108,7 +112,7 @@ def _write_prediction_payload(prediction_path: Path, audio_file: Path, end_s: fl
     )
 
 
-def test_shared_feature_columns_match_between_training_and_inference_paths(tmp_path: Path) -> None:
+def test_training_and_inference_feature_columns_still_match(tmp_path: Path) -> None:
     audio_path = tmp_path / "snippet.wav"
     _write_test_audio(audio_path)
     feature_config = RfFeatureConfig()
@@ -123,16 +127,56 @@ def test_shared_feature_columns_match_between_training_and_inference_paths(tmp_p
     assert list(training_features.keys()) == list(inference_features.keys())
 
 
-def test_mfcc_summary_short_interval_fills_delta_features_with_nan(tmp_path: Path) -> None:
-    audio_path = tmp_path / "short.wav"
-    _write_test_audio(audio_path, duration_s=0.02)
+def test_prepare_rf_segment_resamples_to_configured_sample_rate(tmp_path: Path) -> None:
+    audio_path = tmp_path / "resample.wav"
+    _write_test_audio(audio_path, sample_rate=16_000, duration_s=0.5)
+    signal, source_sr = _mono_signal(audio_path)
+    config = RfFeatureConfig(sample_rate_hz=48_000, min_duration_s=0.4)
 
-    signal, sample_rate = _mono_signal(audio_path)
-    features = mfcc_summary(
-        y=signal,
-        sr=sample_rate,
+    segment, rf_sr = prepare_rf_segment(
+        signal=signal,
+        source_sr=source_sr,
+        t0=0.0,
+        t1=0.5,
+        config=config,
+    )
+
+    assert rf_sr == 48_000
+    assert int(segment.shape[0]) == 24_000
+
+
+def test_prepare_rf_segment_pads_short_segment_to_min_duration(tmp_path: Path) -> None:
+    audio_path = tmp_path / "short-segment.wav"
+    _write_test_audio(audio_path, sample_rate=48_000, duration_s=0.02)
+    signal, source_sr = _mono_signal(audio_path)
+    config = RfFeatureConfig(sample_rate_hz=48_000, min_duration_s=0.4, pad_short_segments=True)
+
+    segment, _rf_sr = prepare_rf_segment(
+        signal=signal,
+        source_sr=source_sr,
         t0=0.0,
         t1=0.02,
+        config=config,
+    )
+
+    assert int(segment.shape[0]) == 19_200
+
+
+def test_mfcc_summary_short_padded_segment_produces_finite_delta_features(tmp_path: Path) -> None:
+    audio_path = tmp_path / "short.wav"
+    _write_test_audio(audio_path, sample_rate=48_000, duration_s=0.02)
+
+    signal, source_sr = _mono_signal(audio_path)
+    segment, rf_sr = prepare_rf_segment(
+        signal=signal,
+        source_sr=source_sr,
+        t0=0.0,
+        t1=0.02,
+        config=RfFeatureConfig(sample_rate_hz=48_000, min_duration_s=0.4, include_deltas=True),
+    )
+    features = mfcc_summary(
+        y=segment,
+        sr=rf_sr,
         n_mfcc=13,
         n_fft=2048,
         hop_length=1024,
@@ -146,10 +190,10 @@ def test_mfcc_summary_short_interval_fills_delta_features_with_nan(tmp_path: Pat
         assert f"d_mfcc{index}_std" in features
         assert f"dd_mfcc{index}_mean" in features
         assert f"dd_mfcc{index}_std" in features
-        assert np.isnan(features[f"d_mfcc{index}_mean"])
-        assert np.isnan(features[f"d_mfcc{index}_std"])
-        assert np.isnan(features[f"dd_mfcc{index}_mean"])
-        assert np.isnan(features[f"dd_mfcc{index}_std"])
+        assert np.isfinite(features[f"d_mfcc{index}_mean"])
+        assert np.isfinite(features[f"d_mfcc{index}_std"])
+        assert np.isfinite(features[f"dd_mfcc{index}_mean"])
+        assert np.isfinite(features[f"dd_mfcc{index}_std"])
 
 
 def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path: Path) -> None:
@@ -202,6 +246,62 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
     assert report["feature_family"] == "rf_v1"
     assert report["rf_threshold"] == 0.4
     assert report["feature_config"] == RfFeatureConfig().model_dump()
+
+
+def test_rf_training_short_clip_with_deltas_completes_without_nan(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    environment = _environment(tmp_path)
+    dataset_dir = environment.datasets_root / "dataset-short"
+    dataset_dir.mkdir(parents=True)
+    snippets_dir = tmp_path / "short-snippets"
+    snippet_specs = [
+        ("train_target.wav", "target", 440.0),
+        ("train_noise.wav", "noise", 880.0),
+        ("val_target.wav", "target", 660.0),
+        ("val_noise.wav", "noise", 1320.0),
+    ]
+    for filename, _classification, frequency_hz in snippet_specs:
+        _write_test_audio(
+            snippets_dir / filename, sample_rate=48_000, duration_s=0.02, frequency_hz=frequency_hz
+        )
+
+    dataset_handle = SimpleNamespace(
+        snippets_dir=snippets_dir,
+        splits=SimpleNamespace(
+            train=["train_target.wav", "train_noise.wav"],
+            val=["val_target.wav", "val_noise.wav"],
+        ),
+        class_to_index={"noise": 0, "target": 1},
+        classes=["noise", "target"],
+        manifest=SimpleNamespace(
+            snippets=[
+                SimpleNamespace(filename=filename, classification=classification)
+                for filename, classification, _ in snippet_specs
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        rf_training_executor,
+        "load_dataset_handle",
+        lambda *_args, **_kwargs: dataset_handle,
+    )
+
+    run_manager = RunManager(environment.runs_root)
+    run_state = run_manager.create_run(
+        "rf_training",
+        {
+            "dataset_name": "dataset-short",
+            "feature_config": {
+                "sample_rate_hz": 48_000,
+                "min_duration_s": 0.4,
+                "pad_short_segments": True,
+                "include_deltas": True,
+            },
+        },
+    )
+    completed = rf_training_executor.execute_rf_training(run_state, environment, run_manager)
+    assert completed.status == "completed"
 
 
 def test_rf_training_uses_configured_threshold_for_validation_metrics(
@@ -477,7 +577,7 @@ def test_rf_filter_rejects_non_rf_v1_feature_family(tmp_path: Path) -> None:
         )
 
 
-def test_rf_training_to_inference_metadata_round_trip_uses_persisted_feature_config(
+def test_rf_filter_uses_persisted_resample_and_padding_config(
     monkeypatch: Any,
     tmp_path: Path,
 ) -> None:
@@ -517,19 +617,22 @@ def test_rf_training_to_inference_metadata_round_trip_uses_persisted_feature_con
     )
 
     run_manager = RunManager(environment.runs_root)
-    non_default_feature_config = {
-        "n_fft": 1024,
-        "hop_length": 256,
-        "n_mfcc": 8,
-        "include_deltas": True,
-        "fmin_hz": 200.0,
-        "fmax_hz": 3000.0,
-    }
+    non_default_feature_config = RfFeatureConfig(
+        sample_rate_hz=48_000,
+        min_duration_s=0.4,
+        pad_short_segments=True,
+        n_fft=1024,
+        hop_length=256,
+        n_mfcc=8,
+        include_deltas=True,
+        fmin_hz=200.0,
+        fmax_hz=3000.0,
+    )
     run_state = run_manager.create_run(
         "rf_training",
         {
             "dataset_name": "dataset-b",
-            "feature_config": non_default_feature_config,
+            "feature_config": non_default_feature_config.model_dump(),
         },
     )
 
@@ -539,19 +642,15 @@ def test_rf_training_to_inference_metadata_round_trip_uses_persisted_feature_con
     model_dir = Path(run_state.run_dir) / "outputs" / "model"
     model_path = model_dir / "rf_model.joblib"
     metadata = read_json(model_dir / "rf_model_metadata.json")
-    assert metadata["feature_config"] == non_default_feature_config
+    assert metadata["feature_config"] == non_default_feature_config.model_dump()
 
     inference_audio = snippets_dir / "train_target.wav"
-    signal, sample_rate = _mono_signal(inference_audio)
-    duration_s = float(len(signal)) / float(sample_rate)
 
     predictions_dir = tmp_path / "predictions"
     predictions_dir.mkdir()
     prediction_path = _prediction_output_path(predictions_dir, str(inference_audio))
     _write_prediction_payload(
-        prediction_path=prediction_path,
-        audio_file=inference_audio,
-        end_s=duration_s,
+        prediction_path=prediction_path, audio_file=inference_audio, end_s=0.02
     )
 
     apply_rf_filter(
@@ -569,3 +668,4 @@ def test_rf_training_to_inference_metadata_round_trip_uses_persisted_feature_con
 
     filtered = read_json(prediction_path.with_name(f"{prediction_path.stem}_rf_filtered.json"))
     assert filtered["detections"][0]["rf_score"] is not None
+    assert isinstance(filtered["detections"][0]["rf_pass"], bool)
