@@ -23,6 +23,7 @@ from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
 from alpaca_pipelines.io_utils import write_json
 from alpaca_pipelines.rf.audio_features import mfcc_summary, raven_robust_features
+from alpaca_pipelines.rf.audio_preprocess import prepare_rf_segment
 from alpaca_pipelines.rf.config import RfFeatureConfig
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
@@ -69,23 +70,26 @@ def _compute_features_for_file(
     audio_path: Path,
     feature_config: RfFeatureConfig,
 ) -> dict[str, float]:
-    signal, sample_rate = _load_audio_signal(audio_path)
-    duration_s = float(len(signal)) / float(sample_rate)
-    robust = raven_robust_features(
-        y=signal,
-        sr=sample_rate,
+    signal, source_sr = _load_audio_signal(audio_path)
+    duration_s = float(len(signal)) / float(source_sr)
+    segment, rf_sr = prepare_rf_segment(
+        signal=signal,
+        source_sr=source_sr,
         t0=0.0,
         t1=duration_s,
+        config=feature_config,
+    )
+    robust = raven_robust_features(
+        y=segment,
+        sr=rf_sr,
         fmin=feature_config.fmin_hz,
         fmax=feature_config.fmax_hz,
         n_fft=feature_config.n_fft,
         hop_length=feature_config.hop_length,
     )
     mfcc = mfcc_summary(
-        y=signal,
-        sr=sample_rate,
-        t0=0.0,
-        t1=duration_s,
+        y=segment,
+        sr=rf_sr,
         n_mfcc=feature_config.n_mfcc,
         n_fft=feature_config.n_fft,
         hop_length=feature_config.hop_length,
@@ -222,7 +226,7 @@ def execute_rf_training(
         )
 
         val_probabilities = model.predict_proba(x_val)
-        val_predictions = (val_probabilities[:, 1] >= 0.5).astype(np.int64)
+        val_predictions = (val_probabilities[:, 1] >= spec.rf_threshold).astype(np.int64)
 
         accuracy = float(accuracy_score(y_val, val_predictions))
         f1 = float(f1_score(y_val, val_predictions, zero_division=0))
@@ -248,6 +252,7 @@ def execute_rf_training(
         metadata = {
             "feature_family": "rf_v1",
             "feature_names": feature_names,
+            "rf_threshold": spec.rf_threshold,
             "feature_config": spec.feature_config.model_dump(),
         }
         write_json(model_dir / "rf_model_metadata.json", metadata)
@@ -274,6 +279,7 @@ def execute_rf_training(
                 "feature_names": feature_names,
             },
             "feature_family": "rf_v1",
+            "rf_threshold": spec.rf_threshold,
             "feature_config": spec.feature_config.model_dump(),
             "hyperparameters": {
                 "n_estimators": spec.n_estimators,

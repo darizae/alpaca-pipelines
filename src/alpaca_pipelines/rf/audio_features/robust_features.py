@@ -21,14 +21,6 @@ _ROBUST_FEATURE_NAMES: Final[tuple[str, ...]] = (
 )
 
 
-def _slice_signal(y: NDArray[np.float32], sr: int, t0: float, t1: float) -> NDArray[np.float32]:
-    start_index = max(0, int(round(float(t0) * sr)))
-    end_index = min(int(y.shape[0]), int(round(float(t1) * sr)))
-    if end_index <= start_index:
-        return np.zeros(0, dtype=np.float32)
-    return y[start_index:end_index]
-
-
 def _band_slice(frequencies_hz: NDArray[np.float64], fmin: float, fmax: float) -> slice:
     low_index = int(np.searchsorted(frequencies_hz, max(0.0, float(fmin)), side="left"))
     high_index = int(np.searchsorted(frequencies_hz, float(fmax), side="right"))
@@ -74,8 +66,6 @@ def _entropy_bits(probability: NDArray[np.float64]) -> float:
 def raven_robust_features(
     y: NDArray[np.float32],
     sr: int,
-    t0: float,
-    t1: float,
     fmin: float,
     fmax: float,
     n_fft: int = 2048,
@@ -83,12 +73,11 @@ def raven_robust_features(
     window: str = "hann",
     center: bool = True,
 ) -> dict[str, float]:
-    segment = _slice_signal(y, sr, t0, t1)
-    if segment.size == 0:
+    if y.size == 0:
         return {key: float("nan") for key in _ROBUST_FEATURE_NAMES}
 
     stft_complex = librosa.stft(
-        segment,
+        y,
         n_fft=n_fft,
         hop_length=hop_length,
         window=window,
