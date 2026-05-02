@@ -49,6 +49,7 @@ class PredictionRunSpec(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    training_run_id: str | None = None
     model_path: str
     mode: Literal["tape", "dataset", "collection"] = "tape"
 
@@ -70,8 +71,9 @@ class PredictionRunSpec(BaseModel):
     min_detection_duration_s: float = 0.0
 
     apply_rf_filter: bool = False
+    rf_training_run_id: str | None = None
     rf_model_path: str | None = None
-    rf_threshold: float = 0.4
+    rf_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
     rf_feature_config: RfFeatureConfig | None = None
 
     run_name: str = ""
@@ -80,6 +82,8 @@ class PredictionRunSpec(BaseModel):
     def validate_mode_inputs(self) -> "PredictionRunSpec":
         if self.apply_rf_filter and not self.rf_model_path:
             raise ValueError("rf_model_path is required when apply_rf_filter is enabled")
+        if not self.apply_rf_filter and self.rf_training_run_id is not None:
+            raise ValueError("rf_training_run_id must be null when apply_rf_filter is disabled")
 
         if self.mode == "dataset":
             if not self.dataset_name:
