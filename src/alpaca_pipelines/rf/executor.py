@@ -12,6 +12,7 @@ import soundfile as sf
 
 from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.rf.audio_features import mfcc_summary, raven_robust_features
+from alpaca_pipelines.rf.audio_preprocess import prepare_rf_segment
 from alpaca_pipelines.rf.config import RfFeatureConfig
 from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
@@ -134,22 +135,25 @@ def apply_rf_filter(
         for detection in detections:
             start_s = float(detection["start_s"])
             end_s = float(detection["end_s"])
-
-            robust = raven_robust_features(
-                y=signal,
-                sr=file_sample_rate,
+            segment, rf_sr = prepare_rf_segment(
+                signal=signal,
+                source_sr=file_sample_rate,
                 t0=start_s,
                 t1=end_s,
+                config=active_feature_config,
+            )
+
+            robust = raven_robust_features(
+                y=segment,
+                sr=rf_sr,
                 fmin=active_feature_config.fmin_hz,
                 fmax=active_feature_config.fmax_hz,
                 n_fft=active_feature_config.n_fft,
                 hop_length=active_feature_config.hop_length,
             )
             mfcc = mfcc_summary(
-                y=signal,
-                sr=file_sample_rate,
-                t0=start_s,
-                t1=end_s,
+                y=segment,
+                sr=rf_sr,
                 n_mfcc=active_feature_config.n_mfcc,
                 n_fft=active_feature_config.n_fft,
                 hop_length=active_feature_config.hop_length,

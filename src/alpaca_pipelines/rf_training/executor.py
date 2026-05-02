@@ -23,6 +23,7 @@ from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.dataset.loader import DatasetHandle, load_dataset_handle
 from alpaca_pipelines.io_utils import write_json
 from alpaca_pipelines.rf.audio_features import mfcc_summary, raven_robust_features
+from alpaca_pipelines.rf.audio_preprocess import prepare_rf_segment
 from alpaca_pipelines.rf.config import RfFeatureConfig
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
@@ -69,23 +70,26 @@ def _compute_features_for_file(
     audio_path: Path,
     feature_config: RfFeatureConfig,
 ) -> dict[str, float]:
-    signal, sample_rate = _load_audio_signal(audio_path)
-    duration_s = float(len(signal)) / float(sample_rate)
-    robust = raven_robust_features(
-        y=signal,
-        sr=sample_rate,
+    signal, source_sr = _load_audio_signal(audio_path)
+    duration_s = float(len(signal)) / float(source_sr)
+    segment, rf_sr = prepare_rf_segment(
+        signal=signal,
+        source_sr=source_sr,
         t0=0.0,
         t1=duration_s,
+        config=feature_config,
+    )
+    robust = raven_robust_features(
+        y=segment,
+        sr=rf_sr,
         fmin=feature_config.fmin_hz,
         fmax=feature_config.fmax_hz,
         n_fft=feature_config.n_fft,
         hop_length=feature_config.hop_length,
     )
     mfcc = mfcc_summary(
-        y=signal,
-        sr=sample_rate,
-        t0=0.0,
-        t1=duration_s,
+        y=segment,
+        sr=rf_sr,
         n_mfcc=feature_config.n_mfcc,
         n_fft=feature_config.n_fft,
         hop_length=feature_config.hop_length,
