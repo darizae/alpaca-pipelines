@@ -406,7 +406,7 @@ def test_rf_filter_reads_exact_prediction_paths_from_prediction_executor(tmp_pat
         end_s=duration_s,
     )
 
-    apply_rf_filter(
+    rf_summary = apply_rf_filter(
         prediction_inputs=[
             {
                 "audio_file": str(audio_file),
@@ -424,6 +424,56 @@ def test_rf_filter_reads_exact_prediction_paths_from_prediction_executor(tmp_pat
     assert filtered["rf_filtered"] is True
     assert filtered["detections"][0]["rf_score"] is not None
     assert isinstance(filtered["detections"][0]["rf_pass"], bool)
+    assert rf_summary["applied"] is True
+    assert rf_summary["base_detections"] == 1
+    assert rf_summary["rf_passed"] + rf_summary["rf_rejected"] + rf_summary["rf_unscored"] == 1
+    assert len(rf_summary["files"]) == 1
+
+
+def test_apply_rf_filter_returns_impact_summary(tmp_path: Path) -> None:
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir(parents=True)
+    model_path = model_dir / "rf_model.joblib"
+    joblib.dump(_PredictCalledModel(), model_path)
+    write_json(
+        model_dir / "rf_model_metadata.json",
+        {
+            "feature_family": "rf_v1",
+            "feature_names": ["mfcc1_mean"],
+            "feature_config": RfFeatureConfig().model_dump(),
+        },
+    )
+
+    prediction_path = tmp_path / "predictions" / "audio.json"
+    write_json(
+        prediction_path,
+        {
+            "audio_file": str(audio_file),
+            "n_windows": 0,
+            "n_detections": 0,
+            "detections": [],
+            "scores_shape": [0, 0],
+        },
+    )
+    summary = apply_rf_filter(
+        prediction_inputs=[
+            {"audio_file": str(audio_file), "prediction_file": str(prediction_path)}
+        ],
+        rf_model_path=str(model_path),
+        rf_threshold=0.4,
+        rf_feature_config=None,
+        prediction_logger=logging.getLogger("test-rf-summary"),
+    )
+    assert summary["applied"] is True
+    assert summary["rf_model_path"] == str(model_path)
+    assert summary["base_detections"] == 0
+    assert summary["rf_passed"] == 0
+    assert summary["rf_rejected"] == 0
+    assert summary["rf_unscored"] == 0
+    assert summary["files"][0]["rf_filtered_file"].endswith("audio_rf_filtered.json")
 
 
 def test_rf_filter_writes_filtered_artifact_for_empty_detection_files(tmp_path: Path) -> None:
@@ -473,6 +523,131 @@ def test_rf_filter_writes_filtered_artifact_for_empty_detection_files(tmp_path: 
     assert filtered["rf_filtered"] is True
     assert filtered["rf_model_path"] == str(model_path)
     assert filtered["rf_threshold"] == 0.4
+
+
+def test_base_and_rf_filtered_outputs_both_remain_available(tmp_path: Path) -> None:
+    audio_file = tmp_path / "collection_a" / "raw" / "same_stem.wav"
+    _write_test_audio(audio_file)
+
+    feature_config = RfFeatureConfig()
+    feature_row = _feature_row(audio_file=audio_file, feature_config=feature_config)
+    columns = list(feature_row.keys())
+    training_table = pd.DataFrame(
+        [feature_row, {k: float(v) + 1e-3 for k, v in feature_row.items()}],
+        columns=columns,
+    )
+    model = RandomForestClassifier(n_estimators=10, random_state=7)
+    model.fit(training_table, np.asarray([0, 1], dtype=np.int64))
+    model_dir = tmp_path / "model"
+    model_dir.mkdir(parents=True)
+    model_path = model_dir / "rf_model.joblib"
+    joblib.dump(model, model_path)
+    write_json(
+        model_dir / "rf_model_metadata.json",
+        {
+            "feature_family": "rf_v1",
+            "feature_names": columns,
+            "feature_config": feature_config.model_dump(),
+        },
+    )
+
+    predictions_dir = tmp_path / "predictions"
+    predictions_dir.mkdir()
+    prediction_path = _prediction_output_path(predictions_dir, str(audio_file))
+    _write_prediction_payload(prediction_path=prediction_path, audio_file=audio_file, end_s=0.4)
+
+    apply_rf_filter(
+        prediction_inputs=[
+            {"audio_file": str(audio_file), "prediction_file": str(prediction_path)}
+        ],
+        rf_model_path=str(model_path),
+        rf_threshold=0.4,
+        rf_feature_config=None,
+        prediction_logger=logging.getLogger("test-rf-preserve-base"),
+    )
+
+    assert prediction_path.is_file()
+    assert prediction_path.with_name(f"{prediction_path.stem}_rf_filtered.json").is_file()
+
+
+def test_rf_filter_summary_counts_pass_reject_unscored(monkeypatch: Any, tmp_path: Path) -> None:
+    from alpaca_pipelines.rf import executor as rf_executor
+
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+
+    prediction_path = tmp_path / "predictions" / "audio.json"
+    write_json(
+        prediction_path,
+        {
+            "audio_file": str(audio_file),
+            "n_windows": 3,
+            "n_detections": 3,
+            "detections": [
+                {"start_s": 0.0, "end_s": 0.2, "score": 0.9},
+                {"start_s": 0.2, "end_s": 0.4, "score": 0.8},
+                {"start_s": 0.4, "end_s": 0.6, "score": 0.7},
+            ],
+            "scores_shape": [3, 2],
+        },
+    )
+
+    class _Model:
+        feature_names_in_ = np.asarray(["mfcc1_mean"], dtype=object)
+
+        def predict_proba(self, x: np.ndarray) -> np.ndarray:
+            score = float(x[0, 0])
+            return np.asarray([[1.0 - score, score]], dtype=np.float64)
+
+    mfcc_calls = {"count": 0}
+
+    def _mfcc_stub(**_kwargs: Any) -> dict[str, float]:
+        mfcc_calls["count"] += 1
+        if mfcc_calls["count"] == 1:
+            return {"mfcc1_mean": 0.9}
+        if mfcc_calls["count"] == 2:
+            return {"mfcc1_mean": 0.1}
+        return {"mfcc1_mean": float("nan")}
+
+    monkeypatch.setattr(rf_executor, "_load_rf_model", lambda _path: _Model())
+    monkeypatch.setattr(
+        rf_executor, "_load_rf_model_metadata", lambda _path: {"feature_family": "rf_v1"}
+    )
+    monkeypatch.setattr(rf_executor, "_validate_rf_metadata_contract", lambda _metadata: None)
+    monkeypatch.setattr(
+        rf_executor,
+        "_resolve_feature_config",
+        lambda **_kwargs: RfFeatureConfig(),
+    )
+    monkeypatch.setattr(
+        rf_executor,
+        "_load_audio_signal",
+        lambda _audio_file: (np.zeros(16_000, dtype=np.float32), 16_000),
+    )
+    monkeypatch.setattr(
+        rf_executor,
+        "prepare_rf_segment",
+        lambda **_kwargs: (np.zeros(4000, dtype=np.float32), 16_000),
+    )
+    monkeypatch.setattr(rf_executor, "raven_robust_features", lambda **_kwargs: {})
+    monkeypatch.setattr(rf_executor, "mfcc_summary", _mfcc_stub)
+
+    summary = apply_rf_filter(
+        prediction_inputs=[
+            {"audio_file": str(audio_file), "prediction_file": str(prediction_path)}
+        ],
+        rf_model_path=str(tmp_path / "model.joblib"),
+        rf_threshold=0.4,
+        rf_feature_config=None,
+        prediction_logger=logging.getLogger("test-rf-counts"),
+    )
+
+    assert summary["base_detections"] == 3
+    assert summary["rf_passed"] == 1
+    assert summary["rf_rejected"] == 1
+    assert summary["rf_unscored"] == 1
+    assert summary["rejection_rate"] == 0.333333
+    assert summary["pass_rate"] == 0.333333
 
 
 def test_rf_filter_rejects_legacy_cnn_logit_models(tmp_path: Path) -> None:
