@@ -30,6 +30,27 @@
     "RfFeatureConfig": {
       "additionalProperties": false,
       "properties": {
+        "sample_rate_hz": {
+          "default": 48000,
+          "title": "Sample Rate Hz",
+          "type": "integer"
+        },
+        "min_duration_s": {
+          "default": 0.4,
+          "title": "Min Duration S",
+          "type": "number"
+        },
+        "pad_short_segments": {
+          "default": true,
+          "title": "Pad Short Segments",
+          "type": "boolean"
+        },
+        "pad_mode": {
+          "const": "constant",
+          "default": "constant",
+          "title": "Pad Mode",
+          "type": "string"
+        },
         "n_fft": {
           "default": 2048,
           "title": "N Fft",
@@ -92,6 +113,18 @@
   "additionalProperties": false,
   "description": "Complete specification for a prediction run.",
   "properties": {
+    "training_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Training Run Id"
+    },
     "model_path": {
       "title": "Model Path",
       "type": "string"
@@ -187,6 +220,18 @@
       "title": "Apply Rf Filter",
       "type": "boolean"
     },
+    "rf_training_run_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rf Training Run Id"
+    },
     "rf_model_path": {
       "anyOf": [
         {
@@ -201,6 +246,8 @@
     },
     "rf_threshold": {
       "default": 0.4,
+      "maximum": 1.0,
+      "minimum": 0.0,
       "title": "Rf Threshold",
       "type": "number"
     },

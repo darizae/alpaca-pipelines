@@ -6,14 +6,6 @@ from librosa.util.exceptions import ParameterError
 from numpy.typing import NDArray
 
 
-def _slice_signal(y: NDArray[np.float32], sr: int, t0: float, t1: float) -> NDArray[np.float32]:
-    start_index = max(0, int(round(float(t0) * sr)))
-    end_index = min(int(y.shape[0]), int(round(float(t1) * sr)))
-    if end_index <= start_index:
-        return np.zeros(0, dtype=np.float32)
-    return y[start_index:end_index]
-
-
 def _summarize_matrix(matrix: NDArray[np.float64], prefix: str) -> dict[str, float]:
     means = matrix.mean(axis=1)
     stds = matrix.std(axis=1)
@@ -37,24 +29,16 @@ def _delta_feature_names(n_mfcc: int) -> list[str]:
 def mfcc_summary(
     y: NDArray[np.float32],
     sr: int,
-    t0: float,
-    t1: float,
     n_mfcc: int = 13,
     n_fft: int = 2048,
     hop_length: int = 1024,
     include_deltas: bool = True,
 ) -> dict[str, float]:
-    segment = _slice_signal(y, sr, t0, t1)
-    if segment.size == 0:
-        feature_names: list[str] = []
-        for index in range(1, n_mfcc + 1):
-            feature_names.extend([f"mfcc{index}_mean", f"mfcc{index}_std"])
-        if include_deltas:
-            feature_names.extend(_delta_feature_names(n_mfcc=n_mfcc))
-        return {name: float("nan") for name in feature_names}
+    if y.size == 0:
+        raise ValueError("MFCC segment is empty; preprocessing must provide a non-empty segment")
 
     mfcc_matrix = librosa.feature.mfcc(
-        y=segment.astype(np.float32, copy=False),
+        y=y.astype(np.float32, copy=False),
         sr=sr,
         n_mfcc=n_mfcc,
         n_fft=n_fft,
@@ -69,7 +53,17 @@ def mfcc_summary(
             delta_2 = librosa.feature.delta(mfcc_matrix, order=2).astype(np.float64)
             summary.update(_summarize_matrix(delta_1, "d_mfcc"))
             summary.update(_summarize_matrix(delta_2, "dd_mfcc"))
-        except (ParameterError, ValueError):
-            summary.update({name: float("nan") for name in _delta_feature_names(n_mfcc=n_mfcc)})
+        except (ParameterError, ValueError) as exc:
+            n_frames = int(mfcc_matrix.shape[1]) if mfcc_matrix.ndim == 2 else 0
+            raise ValueError(
+                "MFCC delta computation failed: segment_samples={} sample_rate={} n_fft={} "
+                "hop_length={} mfcc_frames={}".format(
+                    int(y.shape[0]),
+                    int(sr),
+                    int(n_fft),
+                    int(hop_length),
+                    n_frames,
+                )
+            ) from exc
 
     return summary

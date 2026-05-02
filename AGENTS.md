@@ -37,3 +37,16 @@ Rules for distill usage:
 - Prefer exact schemas, exact line formats, or hard line caps.
 - Do not ask distill vague things like "analyze", "identify", or "summarize" unless the output format is fully specified.
 - Prefer outputs that are easy to inspect quickly and easy to reuse in follow-up commands.
+
+## Pre-commit validation
+
+Run the same checks enforced by pre-commit before pushing changes.
+
+- Full hook suite (authoritative): `dx raw pre-commit run --all-files`
+- Ruff lint: `dx raw pre-commit run ruff --all-files`
+- Ruff format: `dx raw pre-commit run ruff-format --all-files`
+- Mypy: `dx raw pre-commit run mypy --all-files`
+- EOF fixer: `dx raw pre-commit run end-of-file-fixer --all-files`
+- Trailing whitespace: `dx raw pre-commit run trailing-whitespace --all-files`
+- YAML validation: `dx raw pre-commit run check-yaml --all-files`
+- Large file check: `dx raw pre-commit run check-added-large-files --all-files`
