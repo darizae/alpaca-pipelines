@@ -40,6 +40,7 @@ class CuratedLabelAssignments(BaseModel):
 class CuratedPredictionExportItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    curated_example_id: str | None = None
     review_item_id: str
     source_audio_file: str
     start_s: float
@@ -124,6 +125,7 @@ class CuratedPredictionSourceManifest(BaseModel):
 class _MaterializationItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    curated_example_id: str | None = None
     review_item_id: str
     source_audio_file: str
     start_s: float
@@ -238,11 +240,14 @@ def materialize_curated_prediction_examples(
         for item in sorted(grouped_items, key=lambda value: value.review_item_id):
             source_recording_keys.add(item.source_recording_key)
 
-            curated_example_id = _build_curated_example_id(
-                prediction_run_id=prediction_run_id,
-                review_session_id=review_session_id,
-                review_item_id=item.review_item_id,
-            )
+            if item.curated_example_id:
+                curated_example_id = item.curated_example_id
+            else:
+                curated_example_id = _build_curated_example_id(
+                    prediction_run_id=prediction_run_id,
+                    review_session_id=review_session_id,
+                    review_item_id=item.review_item_id,
+                )
             snippet_filename = f"{item.label}_{curated_example_id}.wav"
             snippet_path = snippets_dir / snippet_filename
 
@@ -465,6 +470,7 @@ def _materialization_items_from_review_manifest(
         materialization_items.append(
             _build_materialization_item(
                 review_item_id=review_item.review_item_id or review_item.item_id,
+                curated_example_id=None,
                 source_audio_file=review_item.audio_file,
                 start_s=review_item.start_s,
                 end_s=review_item.end_s,
@@ -492,6 +498,7 @@ def _materialization_items_from_curated_export(
         materialization_items.append(
             _build_materialization_item(
                 review_item_id=item.review_item_id,
+                curated_example_id=item.curated_example_id,
                 source_audio_file=item.source_audio_file,
                 start_s=item.start_s,
                 end_s=item.end_s,
@@ -515,6 +522,7 @@ def _materialization_items_from_curated_export(
 def _build_materialization_item(
     *,
     review_item_id: str,
+    curated_example_id: str | None,
     source_audio_file: str,
     start_s: float,
     end_s: float,
@@ -546,6 +554,7 @@ def _build_materialization_item(
 
     return _MaterializationItem(
         review_item_id=review_item_id,
+        curated_example_id=curated_example_id,
         source_audio_file=source_audio_file,
         start_s=start_s,
         end_s=end_s,

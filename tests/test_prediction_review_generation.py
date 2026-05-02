@@ -13,6 +13,10 @@ from alpaca_pipelines.prediction.review import (
     CuratedPredictionSourceManifest,
     PredictionReviewSpectrogramConfig,
 )
+from alpaca_pipelines.prediction.review.curated import (
+    CuratedPredictionExportItem,
+    _build_curated_example_id,
+)
 
 
 def _build_api(tmp_path: Path) -> PipelineAPI:
@@ -332,6 +336,7 @@ def test_materialize_curated_prediction_examples_accepts_curated_export_manifest
             "review_session_id": "session_curated",
             "items": [
                 {
+                    "curated_example_id": "ui-curated-example-id",
                     "review_item_id": "item_001",
                     "source_audio_file": str(collection_audio),
                     "start_s": 0.1,
@@ -359,6 +364,65 @@ def test_materialize_curated_prediction_examples_accepts_curated_export_manifest
     assert (
         curated_manifest["items"][0]["source_display_path"]
         == "audio_collection_alpha/raw_recordings/audio.wav"
+    )
+    assert curated_manifest["items"][0]["curated_example_id"] == "ui-curated-example-id"
+
+
+def test_curated_prediction_export_item_accepts_curated_example_id() -> None:
+    item = CuratedPredictionExportItem.model_validate(
+        {
+            "curated_example_id": "ui-curated-example-id",
+            "review_item_id": "item_001",
+            "source_audio_file": "/tmp/audio.wav",
+            "start_s": 0.1,
+            "end_s": 0.7,
+            "label": "target",
+        }
+    )
+    assert item.curated_example_id == "ui-curated-example-id"
+
+
+def test_materialize_curated_prediction_examples_falls_back_to_hash_id_when_absent(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    collection_audio = (
+        tmp_path / "collection" / "audio_collection_alpha" / "raw_recordings" / "audio.wav"
+    )
+    _write_test_audio(collection_audio)
+    run_id = _prepare_completed_prediction_run(api, audio_file=collection_audio)
+
+    export_manifest_path = tmp_path / "curated_export_manifest_no_id.json"
+    write_json(
+        export_manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "review_session_id": "session_curated",
+            "items": [
+                {
+                    "review_item_id": "item_001",
+                    "source_audio_file": str(collection_audio),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                    "label": "target",
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "audio.wav",
+                    "source_recording_key": "401_20250211_075558",
+                }
+            ],
+        },
+    )
+
+    payload = api.materialize_curated_prediction_examples(
+        curated_export_manifest=export_manifest_path
+    )
+    curated_manifest = read_json(Path(payload["manifest_paths"][0]))
+    assert curated_manifest["items"][0]["curated_example_id"] == _build_curated_example_id(
+        prediction_run_id=run_id,
+        review_session_id="session_curated",
+        review_item_id="item_001",
     )
 
 
