@@ -476,6 +476,16 @@ def test_dataset_build_operation_completes(
             n_target=5,
             n_noise=6,
             splits={"train": 7, "val": 2, "test": 2},
+            manifest=SimpleNamespace(
+                meta=SimpleNamespace(
+                    n_snippets=11,
+                    n_target=5,
+                    n_noise=6,
+                    strategy_config={"include_manual_review_curated": True},
+                    provenance_summary={"by_provenance_type": {"manual_review_curated": 2}},
+                    manual_curation_summary={"total_examples": 2},
+                )
+            ),
             curated_summary={"curated_candidates": 0, "curated_selected": 0, "curated_deduped": 0},
         ),
     )
@@ -507,7 +517,22 @@ def test_dataset_build_operation_completes(
     persisted = read_json(Path(operation["job_dir"]) / "operation.json")
     assert persisted["status"] == "completed"
     assert persisted["result_summary"]["dataset_dir"] == str(dataset_dir)
+    assert persisted["result_summary"]["dataset_name"] == "strategy-a"
+    assert persisted["result_summary"]["n_snippets"] == 11
     assert persisted["result_summary"]["n_target"] == 5
+    assert persisted["result_summary"]["n_noise"] == 6
+    assert persisted["result_summary"]["strategy_config"]["include_manual_review_curated"] is True
+    assert persisted["result_summary"]["manual_curation_summary"]["total_examples"] == 2
+    assert persisted["result_summary"]["provenance_summary"]["by_provenance_type"] == {
+        "manual_review_curated": 2
+    }
+    assert persisted["result_summary"]["n_snippets"] == (
+        persisted["result_summary"]["n_target"] + persisted["result_summary"]["n_noise"]
+    )
+    assert (
+        sum(persisted["result_summary"]["splits"].values())
+        == persisted["result_summary"]["n_snippets"]
+    )
 
 
 def test_dataset_prepare_review_operation_completes(

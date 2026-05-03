@@ -45,6 +45,24 @@ _LAUNCH_MODE_METADATA_KEY = "launch_mode"
 _DETACHED_WORKER_LAUNCH_MODE = "detached_worker"
 
 
+def _validate_dataset_build_summary(summary: dict[str, Any], manifest: Any) -> None:
+    n_target = int(summary["n_target"])
+    n_noise = int(summary["n_noise"])
+    n_snippets = int(summary["n_snippets"])
+    splits = summary["splits"]
+
+    if n_snippets != n_target + n_noise:
+        raise ValueError("Dataset build summary mismatch: n_snippets != n_target + n_noise")
+    if sum(int(value) for value in splits.values()) != n_snippets:
+        raise ValueError("Dataset build summary mismatch: split totals != n_snippets")
+    if manifest.meta.n_target != n_target:
+        raise ValueError("Dataset build summary mismatch: manifest n_target differs")
+    if manifest.meta.n_noise != n_noise:
+        raise ValueError("Dataset build summary mismatch: manifest n_noise differs")
+    if manifest.meta.n_snippets != n_snippets:
+        raise ValueError("Dataset build summary mismatch: manifest n_snippets differs")
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
@@ -490,14 +508,22 @@ class WorkflowOperationManager:
                 merged_index_path=self.environment.merged_index_path,
                 datasets_root=self.environment.datasets_root,
             )
-            return {
+            manifest = build_result.manifest
+            summary = {
                 "strategy_name": strategy_name,
+                "dataset_name": strategy_name,
                 "dataset_dir": str(build_result.dataset_dir),
-                "n_target": build_result.n_target,
-                "n_noise": build_result.n_noise,
+                "n_snippets": manifest.meta.n_snippets,
+                "n_target": manifest.meta.n_target,
+                "n_noise": manifest.meta.n_noise,
                 "splits": build_result.splits,
+                "strategy_config": manifest.meta.strategy_config,
+                "provenance_summary": manifest.meta.provenance_summary,
+                "manual_curation_summary": manifest.meta.manual_curation_summary,
                 "curated_summary": build_result.curated_summary,
             }
+            _validate_dataset_build_summary(summary, manifest)
+            return summary
         if operation.kind == "prepare_review":
             dataset_name = str(spec["dataset_name"])
             dataset_dir = self.environment.resolve_dataset_dir(dataset_name)
