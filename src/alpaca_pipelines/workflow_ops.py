@@ -631,12 +631,29 @@ class WorkflowOperationManager:
             )
         if self._worker_process_is_active(worker_pid, Path(operation.job_dir)):
             return operation
+        # Re-read state to avoid racing with the worker's own terminal-state write.
+        latest = self._read_operation_state(state_path)
+        if latest is not None:
+            if latest.status not in {"pending", "running"}:
+                return latest
+            latest_pid = self._parse_worker_pid(latest.metadata.get(_WORKER_PID_METADATA_KEY))
+            if latest_pid is not None and self._worker_process_is_active(
+                latest_pid, Path(latest.job_dir)
+            ):
+                return latest
+            operation = latest
         return self._mark_operation_failed(
             state_path,
             operation,
             error="Detached workflow worker process {} is no longer running.".format(worker_pid),
             error_kind="StaleOperation",
         )
+
+    def _read_operation_state(self, state_path: Path) -> WorkflowOperation | None:
+        try:
+            return WorkflowOperation.model_validate(read_json(state_path))
+        except Exception:
+            return None
 
     def _mark_operation_failed(
         self,
