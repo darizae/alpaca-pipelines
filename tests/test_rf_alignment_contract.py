@@ -236,7 +236,7 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
     model_dir = Path(run_state.run_dir) / "outputs" / "model"
     metadata = read_json(model_dir / "rf_model_metadata.json")
     assert metadata["feature_family"] == "rf_v1"
-    assert metadata["rf_threshold"] == 0.4
+    assert metadata["rf_threshold"] == 0.6
     assert metadata["feature_config"] == RfFeatureConfig().model_dump()
     assert metadata["feature_names"] == ["Dur 90% (s)", "mfcc1_mean"]
 
@@ -244,7 +244,7 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
         Path(run_state.run_dir) / "outputs" / "summaries" / "rf_training_report.json"
     )
     assert report["feature_family"] == "rf_v1"
-    assert report["rf_threshold"] == 0.4
+    assert report["rf_threshold"] == 0.6
     assert report["feature_config"] == RfFeatureConfig().model_dump()
 
 
