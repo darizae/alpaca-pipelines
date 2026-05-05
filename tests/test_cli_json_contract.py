@@ -61,6 +61,44 @@ def test_submit_json_failure_writes_only_stderr(
     assert captured.err.strip() == "submission failed"
 
 
+def test_rename_run_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        rename_run=lambda run_id, new_run_name: RunState(
+            run_id=run_id,
+            run_type="training",
+            status="completed",
+            created_at="2026-03-10T10:00:00Z",
+            run_dir=f"/runs/training/{run_id}",
+            spec={"run_name": new_run_name},
+        )
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "rename-run",
+            "--run-id",
+            "id",
+            "--new-run-name",
+            "new-name",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["run_id"] == "id"
+    assert payload["spec"]["run_name"] == "new-name"
+
+
 def test_import_rf_training_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

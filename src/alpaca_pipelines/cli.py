@@ -197,6 +197,20 @@ def _cmd_cancel(args: argparse.Namespace) -> None:
     print("Cancelled run: {}".format(run_state.run_id))
 
 
+def _cmd_rename_run(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        run_state = api.rename_run(args.run_id, args.new_run_name)
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(_run_state_payload(run_state))
+        return
+
+    print("Renamed run: {}".format(run_state.run_id))
+
+
 def _cmd_generate_slurm(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
@@ -660,6 +674,11 @@ def _build_parser() -> argparse.ArgumentParser:
     cancel_parser.add_argument("--run-id", required=True, help="Run ID to cancel")
     cancel_parser.add_argument("--json", action="store_true")
 
+    rename_parser = subparsers.add_parser("rename-run", help="Rename a pipeline run display name")
+    rename_parser.add_argument("--run-id", required=True, help="Run ID to rename")
+    rename_parser.add_argument("--new-run-name", required=True, help="New display name")
+    rename_parser.add_argument("--json", action="store_true")
+
     slurm_parser = subparsers.add_parser("generate-slurm", help="Generate a SLURM batch script")
     slurm_parser.add_argument("--run-id", required=True, help="Run ID")
     slurm_parser.add_argument(
@@ -821,6 +840,7 @@ def main() -> None:
         "list": _cmd_list,
         "inspect": _cmd_inspect,
         "cancel": _cmd_cancel,
+        "rename-run": _cmd_rename_run,
         "generate-slurm": _cmd_generate_slurm,
         "submit": _cmd_submit,
         "import-rf-training": _cmd_import_rf_training,
