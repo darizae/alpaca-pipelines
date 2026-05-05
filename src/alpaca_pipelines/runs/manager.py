@@ -240,6 +240,22 @@ class RunManager:
         self._persist_state(updated)
         return updated
 
+    def rename_run(self, run_id: str, new_run_name: str) -> RunState:
+        state = self.find_run(run_id)
+        if state.status in ("submitted", "running"):
+            raise ValueError("Cannot rename an active run: {}".format(run_id))
+        updated_name = new_run_name.strip()
+        if not updated_name:
+            raise ValueError("new_run_name must be non-empty")
+        current_name = str(state.spec.get("run_name", "")).strip()
+        if current_name == updated_name:
+            raise ValueError("New run name matches current run name")
+        updated_spec = dict(state.spec)
+        updated_spec["run_name"] = updated_name
+        updated = state.model_copy(update={"spec": updated_spec})
+        self._persist_state(updated)
+        return updated
+
     def list_runs(
         self,
         run_type: RunType | None = None,
