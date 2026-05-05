@@ -15,12 +15,14 @@ from typing import Any
 from alpaca_pipelines.config import PipelineEnvironment
 from alpaca_pipelines.contracts import RunState, RunStatus, RunType
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
+from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
 from alpaca_pipelines.prediction.review.curated import (
     list_curated_prediction_sources,
     materialize_curated_prediction_examples,
 )
+from alpaca_pipelines.rf.config import RfFeatureConfig
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_meta
@@ -95,6 +97,159 @@ class PipelineAPI:
             run_type="rf_training",
             spec=spec.to_spec_dict(),
         )
+
+    def import_rf_training_run(
+        self,
+        *,
+        bundle_dir: Path,
+        run_name: str = "",
+        source_label: str | None = None,
+    ) -> RunState:
+        """Import an externally trained RF bundle as a completed RF training run."""
+        if not bundle_dir.is_dir():
+            raise FileNotFoundError(f"RF import bundle directory not found: {bundle_dir}")
+
+        required_files = {
+            "model": bundle_dir / "model.joblib",
+            "feature_params": bundle_dir / "feature_params.json",
+            "feature_columns": bundle_dir / "feature_columns.txt",
+            "metrics": bundle_dir / "metrics.json",
+        }
+        for label, path in required_files.items():
+            if not path.is_file():
+                raise FileNotFoundError(f"RF import bundle missing required {label} file: {path}")
+
+        feature_params = read_json(required_files["feature_params"])
+        if not isinstance(feature_params, dict):
+            raise ValueError("feature_params.json must be a JSON object")
+        feature_payload = dict(feature_params)
+        feature_payload.setdefault("pad_mode", "constant")
+        feature_config = RfFeatureConfig.model_validate(feature_payload).model_dump()
+
+        metrics = read_json(required_files["metrics"])
+        if not isinstance(metrics, dict):
+            raise ValueError("metrics.json must be a JSON object")
+
+        params_path = bundle_dir / "params.json"
+        params: dict[str, Any] = {}
+        if params_path.is_file():
+            params_payload = read_json(params_path)
+            if not isinstance(params_payload, dict):
+                raise ValueError("params.json must be a JSON object")
+            params = params_payload
+
+        feature_names = [
+            line.strip()
+            for line in required_files["feature_columns"].read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        if not feature_names:
+            raise ValueError("feature_columns.txt must contain at least one feature")
+
+        def _as_float(payload: dict[str, Any], key: str) -> float | None:
+            if key not in payload or payload[key] is None:
+                return None
+            try:
+                return float(payload[key])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"metrics.json field {key!r} must be numeric") from exc
+
+        def _as_int(payload: dict[str, Any], key: str) -> int:
+            value = payload.get(key, 0)
+            try:
+                return int(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"metrics.json field {key!r} must be an integer") from exc
+
+        rf_threshold = _as_float(metrics, "decision_threshold")
+        if rf_threshold is None:
+            rf_threshold = 0.4
+        if rf_threshold < 0.0 or rf_threshold > 1.0:
+            raise ValueError("metrics.json decision_threshold must be between 0 and 1")
+
+        tp = _as_int(metrics, "tp")
+        tn = _as_int(metrics, "tn")
+        fp = _as_int(metrics, "fp")
+        fn = _as_int(metrics, "fn")
+        n_val_samples = tp + tn + fp + fn
+
+        run_spec: dict[str, Any] = {
+            "dataset_name": "imported_external",
+            "positive_class": "target",
+            "run_name": run_name,
+            "rf_threshold": rf_threshold,
+            "feature_config": feature_config,
+            "import_source": "rf_sandbox_bundle",
+            "source_bundle_dir": str(bundle_dir),
+        }
+        if source_label:
+            run_spec["source_label"] = source_label
+
+        run_state = self.run_manager.create_run(run_type="rf_training", spec=run_spec)
+        run_state = self.run_manager.mark_running(run_state.run_id)
+        run_dir = Path(run_state.run_dir)
+        model_dir = run_dir / "outputs" / "model"
+        report_path = run_dir / "outputs" / "summaries" / "rf_training_report.json"
+        rf_model_path = model_dir / "rf_model.joblib"
+
+        try:
+            rf_model_path.write_bytes(required_files["model"].read_bytes())
+
+            write_json(
+                model_dir / "rf_model_metadata.json",
+                {
+                    "feature_family": "rf_v1",
+                    "feature_names": feature_names,
+                    "rf_threshold": rf_threshold,
+                    "feature_config": feature_config,
+                },
+            )
+
+            report_metrics: dict[str, Any] = {"classification_report": {}}
+            for metric_name in ("accuracy", "f1", "precision", "recall", "roc_auc"):
+                metric_value = _as_float(metrics, metric_name)
+                if metric_value is not None:
+                    report_metrics[metric_name] = round(metric_value, 6)
+
+            report = {
+                "run_id": run_state.run_id,
+                "dataset_name": "imported_external",
+                "positive_class": "target",
+                "class_to_index": {"noise": 0, "target": 1},
+                "train": {
+                    "n_samples": 0,
+                    "n_positive": 0,
+                    "n_negative": 0,
+                    "files": [],
+                },
+                "val": {
+                    "n_samples": n_val_samples,
+                    "n_positive": tp + fn,
+                    "n_negative": tn + fp,
+                    "files": [],
+                },
+                "features": {
+                    "n_features": len(feature_names),
+                    "feature_names": feature_names,
+                },
+                "feature_family": "rf_v1",
+                "rf_threshold": rf_threshold,
+                "feature_config": feature_config,
+                "hyperparameters": params,
+                "metrics": report_metrics,
+                "model_path": str(rf_model_path),
+            }
+            write_json(report_path, report)
+
+            self.run_manager.update_outputs(
+                run_state.run_id,
+                rf_model_path=str(rf_model_path),
+                rf_training_report_path=str(report_path),
+            )
+            return self.run_manager.mark_completed(run_state.run_id)
+        except Exception as exc:
+            self.run_manager.mark_failed(run_state.run_id, f"{type(exc).__name__}: {exc}")
+            raise
 
     # ------------------------------------------------------------------
     # Run execution

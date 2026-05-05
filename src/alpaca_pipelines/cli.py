@@ -235,6 +235,25 @@ def _cmd_submit(args: argparse.Namespace) -> None:
     print("  Slurm job ID: {}".format(run_state.slurm_job_id))
 
 
+def _cmd_import_rf_training(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        run_state = api.import_rf_training_run(
+            bundle_dir=Path(args.bundle_dir),
+            run_name=args.run_name,
+            source_label=args.source_label,
+        )
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(_run_state_payload(run_state))
+        return
+
+    print("Imported RF model as run: {}".format(run_state.run_id))
+    print("  Run dir: {}".format(run_state.run_dir))
+
+
 def _cmd_export_selection_tables(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
@@ -656,6 +675,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     submit_parser.add_argument("--json", action="store_true")
 
+    import_rf_parser = subparsers.add_parser(
+        "import-rf-training",
+        help="Import an externally trained RF model bundle as a completed rf_training run",
+    )
+    import_rf_parser.add_argument("--bundle-dir", required=True)
+    import_rf_parser.add_argument("--run-name", default="")
+    import_rf_parser.add_argument("--source-label", default=None)
+    import_rf_parser.add_argument("--json", action="store_true")
+
     export_tables_parser = subparsers.add_parser(
         "export-selection-tables",
         help="Export Raven selection tables for a completed prediction run",
@@ -792,6 +820,7 @@ def main() -> None:
         "cancel": _cmd_cancel,
         "generate-slurm": _cmd_generate_slurm,
         "submit": _cmd_submit,
+        "import-rf-training": _cmd_import_rf_training,
         "export-selection-tables": _cmd_export_selection_tables,
         "migrate-backend-meta": _cmd_migrate_backend_meta,
         "prediction-review-preview": _cmd_prediction_review_preview,
