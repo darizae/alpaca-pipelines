@@ -167,6 +167,7 @@ class RunOutputs(BaseModel):
 
     trained_model_path: str | None = None
     rf_model_path: str | None = None
+    rf_training_report_path: str | None = None
     model_dir: str | None = None
     predictions_dir: str | None = None
     prediction_selection_tables_dir: str | None = None
