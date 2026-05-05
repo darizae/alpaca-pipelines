@@ -133,6 +133,18 @@
           "default": null,
           "title": "Rf Model Path"
         },
+        "rf_training_report_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rf Training Report Path"
+        },
         "model_dir": {
           "anyOf": [
             {

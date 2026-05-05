@@ -232,6 +232,7 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
 
     completed = rf_training_executor.execute_rf_training(run_state, environment, run_manager)
     assert completed.status == "completed"
+    persisted_state = run_manager.load_state("rf_training", run_state.run_id)
 
     model_dir = Path(run_state.run_dir) / "outputs" / "model"
     metadata = read_json(model_dir / "rf_model_metadata.json")
@@ -246,6 +247,12 @@ def test_rf_training_persists_feature_config_metadata(monkeypatch: Any, tmp_path
     assert report["feature_family"] == "rf_v1"
     assert report["rf_threshold"] == 0.6
     assert report["feature_config"] == RfFeatureConfig().model_dump()
+    assert isinstance(report["metrics"]["roc_auc"], float)
+    assert persisted_state.outputs.rf_training_report_path == str(
+        Path(run_state.run_dir) / "outputs" / "summaries" / "rf_training_report.json"
+    )
+    assert persisted_state.progress.best_metric_name == "roc_auc"
+    assert isinstance(persisted_state.progress.best_metric_value, float)
 
 
 def test_rf_training_short_clip_with_deltas_completes_without_nan(
@@ -364,6 +371,7 @@ def test_rf_training_uses_configured_threshold_for_validation_metrics(
     )
     assert report["rf_threshold"] == 0.7
     assert report["metrics"]["f1"] == 0.0
+    assert report["metrics"]["roc_auc"] == 1.0
 
 
 def test_rf_filter_reads_exact_prediction_paths_from_prediction_executor(tmp_path: Path) -> None:
