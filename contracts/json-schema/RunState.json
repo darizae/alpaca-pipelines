@@ -340,7 +340,8 @@
         "training",
         "prediction",
         "evaluation",
-        "rf_training"
+        "rf_training",
+        "rf_inference"
       ],
       "title": "Run Type",
       "type": "string"
