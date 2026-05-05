@@ -134,7 +134,7 @@ class DatasetManifest(BaseModel):
 # Run state contracts (owned by alpaca-pipelines)
 # ---------------------------------------------------------------------------
 
-RunType = Literal["training", "prediction", "evaluation", "rf_training"]
+RunType = Literal["training", "prediction", "evaluation", "rf_training", "rf_inference"]
 RunStatus = Literal["created", "submitted", "running", "completed", "failed", "cancelled"]
 PredictionProgressStage = Literal[
     "initializing",

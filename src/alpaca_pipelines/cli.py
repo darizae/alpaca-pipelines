@@ -19,6 +19,7 @@ from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
+from alpaca_pipelines.rf_inference.config import RfInferenceRunSpec
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.training.config import TrainingRunSpec
@@ -89,6 +90,8 @@ def _cmd_create(args: argparse.Namespace) -> None:
             run_state = api.create_prediction_run(PredictionRunSpec.model_validate(config_data))
         elif args.run_type == "evaluation":
             run_state = api.create_evaluation_run(EvaluationRunSpec.model_validate(config_data))
+        elif args.run_type == "rf_inference":
+            run_state = api.create_rf_inference_run(RfInferenceRunSpec.model_validate(config_data))
         else:
             raise ValueError("Unknown run type: {}".format(args.run_type))
     except Exception as exc:
@@ -621,7 +624,7 @@ def _build_parser() -> argparse.ArgumentParser:
     create_parser = subparsers.add_parser("create", help="Create a new pipeline run")
     create_parser.add_argument(
         "run_type",
-        choices=["training", "rf_training", "prediction", "evaluation"],
+        choices=["training", "rf_training", "prediction", "evaluation", "rf_inference"],
         help="Type of run to create",
     )
     create_parser.add_argument(
@@ -637,7 +640,7 @@ def _build_parser() -> argparse.ArgumentParser:
     list_parser = subparsers.add_parser("list", help="List pipeline runs")
     list_parser.add_argument(
         "--type",
-        choices=["training", "rf_training", "prediction", "evaluation"],
+        choices=["training", "rf_training", "prediction", "evaluation", "rf_inference"],
         default=None,
         help="Filter by run type",
     )

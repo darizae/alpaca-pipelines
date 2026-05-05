@@ -82,7 +82,7 @@ class RunManager:
         ensure_directory(run_dir / LOGS_DIR)
         if run_type in ("training", "rf_training"):
             ensure_directory(run_dir / OUTPUTS_DIR / MODEL_DIR)
-        if run_type == "prediction":
+        if run_type in ("prediction", "rf_inference"):
             ensure_directory(run_dir / OUTPUTS_DIR / PREDICTIONS_DIR)
             ensure_directory(
                 run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR
@@ -113,7 +113,7 @@ class RunManager:
         if run_type in ("training", "rf_training"):
             outputs.model_dir = str(run_dir / OUTPUTS_DIR / MODEL_DIR)
             outputs.summaries_dir = str(run_dir / OUTPUTS_DIR / SUMMARIES_DIR)
-        if run_type == "prediction":
+        if run_type in ("prediction", "rf_inference"):
             selection_tables_dir = (
                 run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / PREDICTION_SELECTION_TABLES_DIR
             )
@@ -155,6 +155,7 @@ class RunManager:
             "prediction",
             "evaluation",
             "rf_training",
+            "rf_inference",
         )
         for run_type_candidate in run_types:
             state_path = self._state_path(run_type_candidate, run_id)
@@ -248,7 +249,7 @@ class RunManager:
         run_types: list[RunType] = (
             [run_type]
             if run_type is not None
-            else ["training", "prediction", "evaluation", "rf_training"]
+            else ["training", "prediction", "evaluation", "rf_training", "rf_inference"]
         )
         results: list[RunState] = []
         for rt in run_types:
