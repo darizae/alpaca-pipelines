@@ -627,11 +627,19 @@ def test_rf_filter_summary_counts_pass_reject_unscored(monkeypatch: Any, tmp_pat
         "_resolve_feature_config",
         lambda **_kwargs: RfFeatureConfig(),
     )
-    monkeypatch.setattr(
-        rf_executor,
-        "_load_audio_signal",
-        lambda _audio_file: (np.zeros(16_000, dtype=np.float32), 16_000),
-    )
+    read_calls = {"count": 0}
+
+    def _read_segment_stub(
+        _audio_handle: Any,
+        *,
+        start_s: float,
+        end_s: float,
+    ) -> tuple[np.ndarray, int]:
+        read_calls["count"] += 1
+        assert end_s >= start_s
+        return np.zeros(16_000, dtype=np.float32), 16_000
+
+    monkeypatch.setattr(rf_executor, "_read_audio_segment", _read_segment_stub)
     monkeypatch.setattr(
         rf_executor,
         "prepare_rf_segment",
@@ -656,6 +664,7 @@ def test_rf_filter_summary_counts_pass_reject_unscored(monkeypatch: Any, tmp_pat
     assert summary["rf_unscored"] == 1
     assert summary["rejection_rate"] == 0.333333
     assert summary["pass_rate"] == 0.333333
+    assert read_calls["count"] == 3
 
 
 def test_rf_filter_rejects_legacy_cnn_logit_models(tmp_path: Path) -> None:
