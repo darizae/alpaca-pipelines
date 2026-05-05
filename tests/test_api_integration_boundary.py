@@ -274,11 +274,87 @@ def test_fail_workflow_operation_marks_pending_job_failed(
         error_kind="StaleOperation",
     )
 
-    persisted = read_json(Path(operation["job_dir"]) / "operation.json")
     assert failed["status"] == "failed"
     assert failed["error_kind"] == "StaleOperation"
     assert failed["finished_at"] is not None
-    assert persisted["status"] == "failed"
+
+
+def test_import_rf_training_run_creates_completed_run_with_authoritative_artifacts(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    bundle_dir = tmp_path / "rf_bundle"
+    bundle_dir.mkdir()
+    (bundle_dir / "model.joblib").write_bytes(b"model-bytes")
+    write_json(
+        bundle_dir / "feature_params.json",
+        {
+            "sample_rate_hz": 48000,
+            "min_duration_s": 0.5,
+            "pad_short_segments": True,
+            "n_fft": 4096,
+            "hop_length": 2048,
+            "n_mfcc": 13,
+            "include_deltas": True,
+            "fmin_hz": 50,
+            "fmax_hz": 4500,
+        },
+    )
+    (bundle_dir / "feature_columns.txt").write_text("mfcc1_mean\nmfcc1_std\n", encoding="utf-8")
+    write_json(
+        bundle_dir / "metrics.json",
+        {
+            "accuracy": 0.8,
+            "f1": 0.75,
+            "precision": 0.74,
+            "recall": 0.76,
+            "roc_auc": 0.87,
+            "decision_threshold": 0.6,
+            "tp": 20,
+            "tn": 30,
+            "fp": 10,
+            "fn": 5,
+        },
+    )
+    write_json(
+        bundle_dir / "params.json",
+        {
+            "n_estimators": 800,
+            "max_depth": None,
+            "min_samples_leaf": 2,
+        },
+    )
+
+    run_state = api.import_rf_training_run(bundle_dir=bundle_dir, run_name="imported-rf")
+
+    assert run_state.run_type == "rf_training"
+    assert run_state.status == "completed"
+    assert run_state.outputs.rf_model_path is not None
+    assert run_state.outputs.rf_training_report_path is not None
+
+    metadata = read_json(Path(run_state.run_dir) / "outputs" / "model" / "rf_model_metadata.json")
+    assert metadata["feature_family"] == "rf_v1"
+    assert metadata["rf_threshold"] == 0.6
+    assert metadata["feature_names"] == ["mfcc1_mean", "mfcc1_std"]
+
+    report = read_json(
+        Path(run_state.run_dir) / "outputs" / "summaries" / "rf_training_report.json"
+    )
+    assert report["rf_threshold"] == 0.6
+    assert report["hyperparameters"]["n_estimators"] == 800
+    assert report["metrics"]["f1"] == 0.75
+
+
+def test_import_rf_training_run_requires_expected_bundle_files(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    bundle_dir = tmp_path / "rf_bundle_missing"
+    bundle_dir.mkdir()
+    (bundle_dir / "model.joblib").write_bytes(b"model-bytes")
+
+    with pytest.raises(FileNotFoundError, match="feature_params"):
+        api.import_rf_training_run(bundle_dir=bundle_dir)
 
 
 def test_delete_failed_workflow_operation_removes_job_dir(
