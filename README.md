@@ -444,6 +444,8 @@ Committed JSON Schemas for the UI-facing contracts live under `contracts/json-sc
 ```bash
 make lint       # Run ruff
 make format     # Auto-format
+make fix        # Ruff format + ruff check --fix
 make typecheck  # Run mypy
 make test       # Run pytest
+make check      # fix, then mypy and pytest
 ```

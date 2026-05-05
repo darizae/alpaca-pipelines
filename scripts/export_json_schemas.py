@@ -9,6 +9,8 @@ from alpaca_pipelines.contracts import RunState
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.review import (
+    CuratedPredictionExportManifest,
+    CuratedPredictionSourceManifest,
     PredictionReviewSessionManifest,
     PredictionReviewSpectrogramConfig,
 )
@@ -27,6 +29,8 @@ def main() -> None:
         "PredictionRunSpec": PredictionRunSpec,
         "PredictionReviewSpectrogramConfig": PredictionReviewSpectrogramConfig,
         "PredictionReviewSessionManifest": PredictionReviewSessionManifest,
+        "CuratedPredictionExportManifest": CuratedPredictionExportManifest,
+        "CuratedPredictionSourceManifest": CuratedPredictionSourceManifest,
         "EvaluationRunSpec": EvaluationRunSpec,
         "RfTrainingRunSpec": RfTrainingRunSpec,
         "SlurmConfig": SlurmConfig,
