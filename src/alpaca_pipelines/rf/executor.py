@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from pathlib import Path
 from typing import Any
 
@@ -53,13 +54,37 @@ def _validate_no_legacy_cnn_feature(feature_names: np.ndarray | None) -> None:
         )
 
 
-def _load_audio_signal(audio_file: str) -> tuple[np.ndarray, int]:
-    audio_data, sample_rate = sf.read(audio_file, always_2d=True, dtype="float32")
-    if audio_data.ndim == 2 and audio_data.shape[1] > 1:
-        audio_data = np.mean(audio_data, axis=1)
+def _read_audio_segment(
+    audio_handle: sf.SoundFile,
+    start_s: float,
+    end_s: float,
+) -> tuple[np.ndarray, int]:
+    sample_rate = int(audio_handle.samplerate)
+    total_frames = len(audio_handle)
+    if sample_rate <= 0 or total_frames <= 0:
+        return np.zeros(0, dtype=np.float32), sample_rate
+
+    if not math.isfinite(start_s):
+        start_s = 0.0
+    if not math.isfinite(end_s):
+        end_s = 0.0
+
+    start_frame = int(round(max(0.0, start_s) * float(sample_rate)))
+    end_frame = int(round(max(0.0, end_s) * float(sample_rate)))
+    start_frame = min(max(0, start_frame), total_frames)
+    end_frame = min(max(0, end_frame), total_frames)
+    if end_frame <= start_frame:
+        return np.zeros(0, dtype=np.float32), sample_rate
+
+    audio_handle.seek(start_frame)
+    audio_data = audio_handle.read(end_frame - start_frame, always_2d=True, dtype="float32")
+    if audio_data.size == 0:
+        return np.zeros(0, dtype=np.float32), sample_rate
+    if audio_data.shape[1] > 1:
+        mono = np.mean(audio_data, axis=1, dtype=np.float32)
     else:
-        audio_data = audio_data.flatten()
-    return audio_data, int(sample_rate)
+        mono = audio_data[:, 0]
+    return np.asarray(mono, dtype=np.float32), sample_rate
 
 
 def _resolve_feature_config(
@@ -148,67 +173,72 @@ def apply_rf_filter(
             )
             continue
 
-        signal, file_sample_rate = _load_audio_signal(audio_file)
-
         filtered_detections: list[dict[str, Any]] = []
-        for detection in detections:
-            start_s = float(detection["start_s"])
-            end_s = float(detection["end_s"])
-            segment, rf_sr = prepare_rf_segment(
-                signal=signal,
-                source_sr=file_sample_rate,
-                t0=start_s,
-                t1=end_s,
-                config=active_feature_config,
-            )
+        with sf.SoundFile(audio_file) as source_audio:
+            for detection in detections:
+                start_s = float(detection["start_s"])
+                end_s = float(detection["end_s"])
+                raw_segment, file_sample_rate = _read_audio_segment(
+                    source_audio,
+                    start_s=start_s,
+                    end_s=end_s,
+                )
+                segment_duration_s = float(raw_segment.shape[0]) / float(file_sample_rate or 1)
+                segment, rf_sr = prepare_rf_segment(
+                    signal=raw_segment,
+                    source_sr=file_sample_rate,
+                    t0=0.0,
+                    t1=segment_duration_s,
+                    config=active_feature_config,
+                )
 
-            robust = raven_robust_features(
-                y=segment,
-                sr=rf_sr,
-                fmin=active_feature_config.fmin_hz,
-                fmax=active_feature_config.fmax_hz,
-                n_fft=active_feature_config.n_fft,
-                hop_length=active_feature_config.hop_length,
-            )
-            mfcc = mfcc_summary(
-                y=segment,
-                sr=rf_sr,
-                n_mfcc=active_feature_config.n_mfcc,
-                n_fft=active_feature_config.n_fft,
-                hop_length=active_feature_config.hop_length,
-                include_deltas=active_feature_config.include_deltas,
-            )
-            feature_row = {**robust, **mfcc}
+                robust = raven_robust_features(
+                    y=segment,
+                    sr=rf_sr,
+                    fmin=active_feature_config.fmin_hz,
+                    fmax=active_feature_config.fmax_hz,
+                    n_fft=active_feature_config.n_fft,
+                    hop_length=active_feature_config.hop_length,
+                )
+                mfcc = mfcc_summary(
+                    y=segment,
+                    sr=rf_sr,
+                    n_mfcc=active_feature_config.n_mfcc,
+                    n_fft=active_feature_config.n_fft,
+                    hop_length=active_feature_config.hop_length,
+                    include_deltas=active_feature_config.include_deltas,
+                )
+                feature_row = {**robust, **mfcc}
 
-            if feature_names is not None:
-                try:
+                if feature_names is not None:
+                    try:
+                        feature_vector = np.array(
+                            [float(feature_row[str(name)]) for name in feature_names],
+                            dtype=np.float64,
+                        ).reshape(1, -1)
+                    except KeyError as exc:
+                        raise KeyError(
+                            "Missing required RF feature '{}' for detection in {}".format(
+                                exc.args[0], audio_file
+                            )
+                        ) from exc
+                else:
                     feature_vector = np.array(
-                        [float(feature_row[str(name)]) for name in feature_names],
+                        list(feature_row.values()),
                         dtype=np.float64,
                     ).reshape(1, -1)
-                except KeyError as exc:
-                    raise KeyError(
-                        "Missing required RF feature '{}' for detection in {}".format(
-                            exc.args[0], audio_file
-                        )
-                    ) from exc
-            else:
-                feature_vector = np.array(
-                    list(feature_row.values()),
-                    dtype=np.float64,
-                ).reshape(1, -1)
 
-            detection_with_rf = dict(detection)
-            if np.any(~np.isfinite(feature_vector)):
-                detection_with_rf["rf_score"] = None
-                detection_with_rf["rf_pass"] = False
-            else:
-                rf_probabilities = rf_model.predict_proba(feature_vector)
-                rf_target_score = float(rf_probabilities[0, 1])
-                detection_with_rf["rf_score"] = round(rf_target_score, 6)
-                detection_with_rf["rf_pass"] = rf_target_score >= rf_threshold
+                detection_with_rf = dict(detection)
+                if np.any(~np.isfinite(feature_vector)):
+                    detection_with_rf["rf_score"] = None
+                    detection_with_rf["rf_pass"] = False
+                else:
+                    rf_probabilities = rf_model.predict_proba(feature_vector)
+                    rf_target_score = float(rf_probabilities[0, 1])
+                    detection_with_rf["rf_score"] = round(rf_target_score, 6)
+                    detection_with_rf["rf_pass"] = rf_target_score >= rf_threshold
 
-            filtered_detections.append(detection_with_rf)
+                filtered_detections.append(detection_with_rf)
 
         filtered_data = dict(prediction_data)
         filtered_data["detections"] = filtered_detections
