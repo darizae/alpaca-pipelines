@@ -9,16 +9,16 @@ class RfFeatureConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     sample_rate_hz: int = 48000
-    min_duration_s: float = 0.4
+    min_duration_s: float = 0.5
     pad_short_segments: bool = True
     pad_mode: Literal["constant"] = "constant"
 
-    n_fft: int = 2048
-    hop_length: int = 1024
+    n_fft: int = 4096
+    hop_length: int = 2048
     n_mfcc: int = 13
     include_deltas: bool = True
-    fmin_hz: float = 0.0
-    fmax_hz: float = 4000.0
+    fmin_hz: float = 50.0
+    fmax_hz: float = 4500.0
 
     @field_validator("sample_rate_hz", "n_fft", "hop_length", "n_mfcc")
     @classmethod
