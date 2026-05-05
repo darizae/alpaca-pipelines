@@ -13,6 +13,7 @@ _PIPELINE_RUN_TYPES: tuple[RunType, ...] = (
     "prediction",
     "evaluation",
     "rf_training",
+    "rf_inference",
 )
 
 

@@ -23,6 +23,7 @@ from alpaca_pipelines.prediction.review.curated import (
     materialize_curated_prediction_examples,
 )
 from alpaca_pipelines.rf.config import RfFeatureConfig
+from alpaca_pipelines.rf_inference.config import RfInferenceRunSpec
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_meta
@@ -96,6 +97,19 @@ class PipelineAPI:
         return self.run_manager.create_run(
             run_type="rf_training",
             spec=spec.to_spec_dict(),
+        )
+
+    def create_rf_inference_run(self, spec: RfInferenceRunSpec) -> RunState:
+        """Create a new standalone RF inference run from a specification."""
+        if not Path(spec.source_predictions_dir).is_dir():
+            raise FileNotFoundError(
+                "Source predictions directory not found: {}".format(spec.source_predictions_dir)
+            )
+        if not Path(spec.rf_model_path).is_file():
+            raise FileNotFoundError("RF model file not found: {}".format(spec.rf_model_path))
+        return self.run_manager.create_run(
+            run_type="rf_inference",
+            spec=spec.model_dump(),
         )
 
     def import_rf_training_run(
@@ -289,6 +303,10 @@ class PipelineAPI:
             from alpaca_pipelines.rf_training.executor import execute_rf_training
 
             return execute_rf_training(run_state, self.environment, self.run_manager)
+        elif run_state.run_type == "rf_inference":
+            from alpaca_pipelines.rf_inference.executor import execute_rf_inference
+
+            return execute_rf_inference(run_state, self.environment, self.run_manager)
 
         raise ValueError("Unknown run type: {}".format(run_state.run_type))
 
