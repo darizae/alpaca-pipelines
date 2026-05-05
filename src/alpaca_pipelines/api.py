@@ -318,6 +318,10 @@ class PipelineAPI:
         """Poll the current status of a run."""
         return self.run_manager.find_run(run_id)
 
+    def rename_run(self, run_id: str, new_run_name: str) -> RunState:
+        """Rename a run display name in persisted run spec."""
+        return self.run_manager.rename_run(run_id, new_run_name)
+
     def list_runs(
         self,
         run_type: RunType | None = None,
