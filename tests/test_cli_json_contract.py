@@ -61,6 +61,49 @@ def test_submit_json_failure_writes_only_stderr(
     assert captured.err.strip() == "submission failed"
 
 
+def test_import_rf_training_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        import_rf_training_run=lambda bundle_dir, run_name="", source_label=None: RunState(
+            run_id="55555555-1111-2222-3333-444444444444",
+            run_type="rf_training",
+            status="completed",
+            created_at="2026-03-10T10:00:00Z",
+            completed_at="2026-03-10T10:01:00Z",
+            run_dir="/runs/rf_training/55555555-1111-2222-3333-444444444444",
+            spec={"run_name": run_name, "source_label": source_label},
+        )
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "import-rf-training",
+            "--bundle-dir",
+            "/tmp/rf-bundle",
+            "--run-name",
+            "imported",
+            "--source-label",
+            "grid-search-best",
+            "--json",
+        ],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["run_type"] == "rf_training"
+    assert payload["status"] == "completed"
+    assert payload["spec"]["run_name"] == "imported"
+    assert payload["spec"]["source_label"] == "grid-search-best"
+
+
 def test_create_json_validation_failure_writes_single_line_stderr(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
