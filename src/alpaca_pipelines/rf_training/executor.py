@@ -16,6 +16,7 @@ from sklearn.metrics import (
     f1_score,
     precision_score,
     recall_score,
+    roc_auc_score,
 )
 
 from alpaca_pipelines.config import PipelineEnvironment
@@ -232,13 +233,18 @@ def execute_rf_training(
         f1 = float(f1_score(y_val, val_predictions, zero_division=0))
         precision = float(precision_score(y_val, val_predictions, zero_division=0))
         recall = float(recall_score(y_val, val_predictions, zero_division=0))
+        try:
+            roc_auc = float(roc_auc_score(y_val, val_probabilities[:, 1]))
+        except ValueError as exc:
+            raise ValueError("Validation ROC-AUC is undefined for the current val split") from exc
 
         rf_logger.info(
-            "Validation metrics: accuracy={}, f1={}, precision={}, recall={}".format(
+            "Validation metrics: accuracy={}, f1={}, precision={}, recall={}, roc_auc={}".format(
                 round(accuracy, 6),
                 round(f1, 6),
                 round(precision, 6),
                 round(recall, 6),
+                round(roc_auc, 6),
             )
         )
 
@@ -296,6 +302,7 @@ def execute_rf_training(
                 "f1": round(f1, 6),
                 "precision": round(precision, 6),
                 "recall": round(recall, 6),
+                "roc_auc": round(roc_auc, 6),
                 "classification_report": classification_report(
                     y_val, val_predictions, output_dict=True, zero_division=0
                 ),
@@ -304,11 +311,13 @@ def execute_rf_training(
         }
 
         summaries_dir = run_dir / "outputs" / "summaries"
-        write_json(summaries_dir / "rf_training_report.json", report)
+        report_path = summaries_dir / "rf_training_report.json"
+        write_json(report_path, report)
 
         run_manager.update_outputs(
             run_state.run_id,
             rf_model_path=str(model_path),
+            rf_training_report_path=str(report_path),
         )
 
         run_manager.update_progress(
@@ -316,8 +325,8 @@ def execute_rf_training(
             current_phase="completed",
             current_epoch=3,
             total_epochs=3,
-            best_metric_name="f1",
-            best_metric_value=f1,
+            best_metric_name="roc_auc",
+            best_metric_value=roc_auc,
         )
 
         run_state = run_manager.mark_completed(run_state.run_id)
