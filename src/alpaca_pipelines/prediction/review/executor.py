@@ -27,6 +27,8 @@ _MANUAL_REVIEW_DIR = "manual_review"
 _SESSION_SUMMARY_FILENAME = "summary.json"
 _RAVEN_DIR = "raven"
 _RAVEN_CONCAT_FILENAME = "review_concat.wav"
+_FLAT_SNIPPETS_DIR = "flat_snippets_bundle"
+_FLAT_SNIPPETS_MANIFEST_FILENAME = "snippets_manifest.json"
 
 
 def generate_prediction_review_preview(
@@ -245,6 +247,76 @@ def export_prediction_review_artifacts(
     }
     write_json(export_summary_path, payload)
     return payload
+
+
+def export_prediction_review_flat_snippets_bundle(
+    *,
+    run_manager: RunManager,
+    manifest_path: Path,
+    output_dir: Path | None = None,
+) -> dict[str, Any]:
+    manifest = _load_manifest(manifest_path)
+    run_state = _resolve_prediction_run(run_manager, manifest.prediction_run_id)
+    _validate_manifest_audio_inventory(run_state, manifest)
+
+    session_dir = _session_dir(run_state, manifest.session_id)
+    package_dir = output_dir if output_dir is not None else session_dir / _FLAT_SNIPPETS_DIR
+    package_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_items: list[dict[str, Any]] = []
+    total_clip_bytes = 0
+    for item_index, item in enumerate(manifest.items):
+        source_clip = session_dir / "items" / item.item_id / "clip.wav"
+        if not source_clip.is_file():
+            raise FileNotFoundError("Missing review clip: {}".format(source_clip))
+        clip_filename = "snippet_{:06d}_{}.wav".format(item_index, item.item_id)
+        destination_clip = package_dir / clip_filename
+        if destination_clip.exists():
+            raise FileExistsError("Export target already exists: {}".format(destination_clip))
+        shutil.copy2(source_clip, destination_clip)
+        clip_size_bytes = destination_clip.stat().st_size
+        total_clip_bytes += clip_size_bytes
+        source_display_path: str | None = None
+        if isinstance(item.payload_json, dict):
+            payload_display_path = item.payload_json.get("source_display_path")
+            if isinstance(payload_display_path, str):
+                source_display_path = payload_display_path
+        manifest_items.append(
+            {
+                "item_index": item_index,
+                "item_id": item.item_id,
+                "snippet_filename": clip_filename,
+                "snippet_size_bytes": clip_size_bytes,
+                "audio_file": item.audio_file,
+                "start_s": item.start_s,
+                "end_s": item.end_s,
+                "detection_score": item.detection_score,
+                "detection_index": item.detection_index,
+                "review_item_id": item.review_item_id,
+                "source_collection_name": item.source_collection_name,
+                "source_category_dir": item.source_category_dir,
+                "source_relative_path": item.source_relative_path,
+                "source_display_path": source_display_path,
+                "source_recording_key": item.source_recording_key,
+            }
+        )
+
+    summary_path = package_dir / "summary.json"
+    manifest_payload = {
+        "schema_version": 1,
+        "mode": "flat_snippets_bundle",
+        "prediction_run_id": manifest.prediction_run_id,
+        "session_id": manifest.session_id,
+        "output_dir": str(package_dir),
+        "summary_path": str(summary_path),
+        "manifest_path": str(package_dir / _FLAT_SNIPPETS_MANIFEST_FILENAME),
+        "n_items": len(manifest_items),
+        "estimated_size_bytes": total_clip_bytes,
+        "items": manifest_items,
+    }
+    write_json(package_dir / _FLAT_SNIPPETS_MANIFEST_FILENAME, manifest_payload)
+    write_json(summary_path, manifest_payload)
+    return manifest_payload
 
 
 def _load_manifest(manifest_path: Path) -> PredictionReviewSessionManifest:
