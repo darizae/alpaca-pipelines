@@ -24,14 +24,14 @@ class RfTrainingRunSpec(BaseModel):
 
     random_state: int = 1337
 
-    n_estimators: int = 400
+    n_estimators: int = 800
     max_depth: int | None = None
     min_samples_split: int = 2
-    min_samples_leaf: int = 1
+    min_samples_leaf: int = 2
     max_features: Literal["sqrt", "log2"] | float | int | None = "sqrt"
     class_weight: Literal["balanced", "balanced_subsample"] | dict[str, float] | None = "balanced"
     n_jobs: int = -1
-    rf_threshold: float = Field(default=0.4, ge=0.0, le=1.0)
+    rf_threshold: float = Field(default=0.6, ge=0.0, le=1.0)
     feature_config: RfFeatureConfig = Field(default_factory=RfFeatureConfig)
 
     def to_spec_dict(self) -> dict[str, Any]:
