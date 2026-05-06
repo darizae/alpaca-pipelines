@@ -259,6 +259,77 @@ def test_standardizer_import_json_writes_single_json_document(
     assert payload["workflow"] == "standardizer"
 
 
+def test_backfill_rf_inference_partitions_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    summary_payload = {
+        "scanned": 2,
+        "n_migrated": 1,
+        "n_skipped": 1,
+        "n_failed": 0,
+        "migrated": ["run-a"],
+        "skipped": ["run-b"],
+        "failed": [],
+    }
+    api = SimpleNamespace(
+        backfill_rf_inference_partitions=lambda runs_root=None, run_id=None: SimpleNamespace(
+            failed=[],
+            to_dict=lambda: summary_payload,
+        )
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["alpaca-pipelines", "backfill-rf-inference-partitions", "--json"],
+    )
+
+    main()
+
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["n_migrated"] == 1
+    assert payload["n_failed"] == 0
+
+
+def test_backfill_rf_inference_partitions_json_returns_nonzero_when_failures_present(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    summary_payload = {
+        "scanned": 2,
+        "n_migrated": 1,
+        "n_skipped": 0,
+        "n_failed": 1,
+        "migrated": ["run-a"],
+        "skipped": [],
+        "failed": [{"run_id": "run-b", "error": "missing artifact"}],
+    }
+    api = SimpleNamespace(
+        backfill_rf_inference_partitions=lambda runs_root=None, run_id=None: SimpleNamespace(
+            failed=summary_payload["failed"],
+            to_dict=lambda: summary_payload,
+        )
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["alpaca-pipelines", "backfill-rf-inference-partitions", "--json"],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+
+    captured = capsys.readouterr()
+    assert excinfo.value.code == 1
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["n_failed"] == 1
+
+
 def test_dataset_apply_review_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],

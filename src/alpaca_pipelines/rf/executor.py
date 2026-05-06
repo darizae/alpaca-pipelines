@@ -18,6 +18,33 @@ from alpaca_pipelines.rf.config import RfFeatureConfig
 from bioacoustics_dl_toolbox.rf.types import RfClassifierProtocol
 
 
+def _partition_rf_detections(
+    detections: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    accepted: list[dict[str, Any]] = []
+    rejected: list[dict[str, Any]] = []
+    unscored: list[dict[str, Any]] = []
+    for detection in detections:
+        rf_score = detection.get("rf_score")
+        if rf_score is None:
+            unscored.append(detection)
+        elif bool(detection.get("rf_pass")):
+            accepted.append(detection)
+        else:
+            rejected.append(detection)
+    return accepted, rejected, unscored
+
+
+def _partition_artifact_paths(prediction_file: Path) -> dict[str, Path]:
+    stem = prediction_file.stem
+    return {
+        "rf_filtered_file": prediction_file.with_name(f"{stem}_rf_filtered.json"),
+        "rf_accepted_file": prediction_file.with_name(f"{stem}_rf_accepted.json"),
+        "rf_rejected_file": prediction_file.with_name(f"{stem}_rf_rejected.json"),
+        "rf_unscored_file": prediction_file.with_name(f"{stem}_rf_unscored.json"),
+    }
+
+
 def _load_rf_model(rf_model_path: str) -> RfClassifierProtocol:
     model: RfClassifierProtocol = joblib.load(rf_model_path)
     return model
@@ -153,13 +180,29 @@ def apply_rf_filter(
             filtered_data["rf_filtered"] = True
             filtered_data["rf_model_path"] = rf_model_path
             filtered_data["rf_threshold"] = rf_threshold
-            filtered_path = prediction_file.with_name(f"{prediction_file.stem}_rf_filtered.json")
+            artifact_paths = _partition_artifact_paths(prediction_file)
+            filtered_path = artifact_paths["rf_filtered_file"]
             write_json(filtered_path, filtered_data)
+            write_json(
+                artifact_paths["rf_accepted_file"],
+                {**filtered_data, "detections": []},
+            )
+            write_json(
+                artifact_paths["rf_rejected_file"],
+                {**filtered_data, "detections": []},
+            )
+            write_json(
+                artifact_paths["rf_unscored_file"],
+                {**filtered_data, "detections": []},
+            )
             file_summaries.append(
                 {
                     "audio_file": audio_file,
                     "prediction_file": str(prediction_file),
                     "rf_filtered_file": str(filtered_path),
+                    "rf_accepted_file": str(artifact_paths["rf_accepted_file"]),
+                    "rf_rejected_file": str(artifact_paths["rf_rejected_file"]),
+                    "rf_unscored_file": str(artifact_paths["rf_unscored_file"]),
                     "base_detections": 0,
                     "rf_passed": 0,
                     "rf_rejected": 0,
@@ -246,16 +289,28 @@ def apply_rf_filter(
         filtered_data["rf_model_path"] = rf_model_path
         filtered_data["rf_threshold"] = rf_threshold
 
-        filtered_path = prediction_file.with_name(f"{prediction_file.stem}_rf_filtered.json")
+        artifact_paths = _partition_artifact_paths(prediction_file)
+        filtered_path = artifact_paths["rf_filtered_file"]
         write_json(filtered_path, filtered_data)
-
-        n_passed = sum(1 for d in filtered_detections if d.get("rf_pass", False))
-        n_unscored = sum(1 for d in filtered_detections if d.get("rf_score") is None)
-        n_rejected = sum(
-            1
-            for d in filtered_detections
-            if not d.get("rf_pass", False) and d.get("rf_score") is not None
+        accepted_detections, rejected_detections, unscored_detections = _partition_rf_detections(
+            filtered_detections
         )
+        write_json(
+            artifact_paths["rf_accepted_file"],
+            {**filtered_data, "detections": accepted_detections},
+        )
+        write_json(
+            artifact_paths["rf_rejected_file"],
+            {**filtered_data, "detections": rejected_detections},
+        )
+        write_json(
+            artifact_paths["rf_unscored_file"],
+            {**filtered_data, "detections": unscored_detections},
+        )
+
+        n_passed = len(accepted_detections)
+        n_rejected = len(rejected_detections)
+        n_unscored = len(unscored_detections)
         base_detections = len(filtered_detections)
         total_base += base_detections
         total_passed += n_passed
@@ -266,6 +321,9 @@ def apply_rf_filter(
                 "audio_file": audio_file,
                 "prediction_file": str(prediction_file),
                 "rf_filtered_file": str(filtered_path),
+                "rf_accepted_file": str(artifact_paths["rf_accepted_file"]),
+                "rf_rejected_file": str(artifact_paths["rf_rejected_file"]),
+                "rf_unscored_file": str(artifact_paths["rf_unscored_file"]),
                 "base_detections": base_detections,
                 "rf_passed": n_passed,
                 "rf_rejected": n_rejected,

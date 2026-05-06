@@ -32,6 +32,85 @@ def _training_spec() -> TrainingRunSpec:
     return TrainingRunSpec(dataset_name="dataset-a")
 
 
+def _create_completed_rf_inference_run(
+    api: PipelineAPI,
+    tmp_path: Path,
+    *,
+    name: str,
+    filtered_file_path: Path | None = None,
+) -> str:
+    source_predictions_dir = tmp_path / f"{name}_source_predictions"
+    source_predictions_dir.mkdir()
+    write_json(
+        source_predictions_dir / "prediction_summary.json",
+        {
+            "rf_filtered": False,
+            "files": [],
+        },
+    )
+
+    run_state = api.run_manager.create_run(
+        "rf_inference",
+        {
+            "source_prediction_run_id": f"{name}-source-run",
+            "rf_training_run_id": f"{name}-rf-train-run",
+            "source_predictions_dir": str(source_predictions_dir),
+            "rf_model_path": "/models/rf.joblib",
+            "rf_threshold": 0.6,
+            "rf_feature_config": {},
+            "run_name": name,
+        },
+    )
+    run_state = api.run_manager.mark_running(run_state.run_id)
+    run_state = api.run_manager.mark_completed(run_state.run_id)
+    predictions_dir = Path(str(run_state.outputs.predictions_dir))
+    filtered_path = (
+        filtered_file_path
+        if filtered_file_path is not None
+        else predictions_dir / f"{name}_rf_filtered.json"
+    )
+    write_json(
+        filtered_path,
+        {
+            "audio_file": str(tmp_path / f"{name}.wav"),
+            "rf_filtered": True,
+            "rf_threshold": 0.6,
+            "detections": [
+                {"start_s": 0.0, "end_s": 0.1, "rf_score": 0.9, "rf_pass": True},
+                {"start_s": 0.2, "end_s": 0.3, "rf_score": 0.2, "rf_pass": False},
+                {"start_s": 0.4, "end_s": 0.5, "rf_score": None, "rf_pass": False},
+            ],
+        },
+    )
+    write_json(
+        predictions_dir / "prediction_summary.json",
+        {
+            "rf_filtered": True,
+            "rf_filter_summary": {
+                "files": [
+                    {
+                        "audio_file": str(tmp_path / f"{name}.wav"),
+                        "prediction_file": str(predictions_dir / f"{name}.json"),
+                        "rf_filtered_file": str(filtered_path),
+                        "base_detections": 3,
+                        "rf_passed": 1,
+                        "rf_rejected": 1,
+                        "rf_unscored": 1,
+                    }
+                ]
+            },
+            "files": [
+                {
+                    "audio_file": str(tmp_path / f"{name}.wav"),
+                    "n_windows": 0,
+                    "n_detections": 3,
+                }
+            ],
+        },
+    )
+    return run_state.run_id
+
+
 def test_submit_run_persists_submitted_at_and_slurm_job_id(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -239,6 +318,82 @@ def test_migrate_backend_meta_fails_when_sidecar_exists_without_run_state(
 
     with pytest.raises(ValueError, match="Inconsistent backend_meta migration state"):
         api.migrate_backend_meta()
+
+
+def test_backfill_rf_inference_partitions_creates_partition_artifacts(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    run_id = _create_completed_rf_inference_run(api, tmp_path, name="rf-backfill")
+
+    summary = api.backfill_rf_inference_partitions()
+
+    assert summary.migrated == [run_id]
+    assert summary.failed == []
+    run_state = api.get_run_status(run_id)
+    predictions_dir = Path(str(run_state.outputs.predictions_dir))
+    persisted_summary = read_json(predictions_dir / "prediction_summary.json")
+    file_entry = persisted_summary["rf_filter_summary"]["files"][0]
+    assert Path(file_entry["rf_accepted_file"]).is_file()
+    assert Path(file_entry["rf_rejected_file"]).is_file()
+    assert Path(file_entry["rf_unscored_file"]).is_file()
+
+    accepted_payload = read_json(Path(file_entry["rf_accepted_file"]))
+    rejected_payload = read_json(Path(file_entry["rf_rejected_file"]))
+    unscored_payload = read_json(Path(file_entry["rf_unscored_file"]))
+    assert len(accepted_payload["detections"]) == 1
+    assert len(rejected_payload["detections"]) == 1
+    assert len(unscored_payload["detections"]) == 1
+
+
+def test_backfill_rf_inference_partitions_is_idempotent(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    run_id = _create_completed_rf_inference_run(api, tmp_path, name="rf-idempotent")
+
+    first = api.backfill_rf_inference_partitions()
+    second = api.backfill_rf_inference_partitions()
+
+    assert first.migrated == [run_id]
+    assert second.migrated == []
+    assert second.skipped == [run_id]
+    assert second.failed == []
+
+
+def test_backfill_rf_inference_partitions_continues_on_failure(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    good_run_id = _create_completed_rf_inference_run(api, tmp_path, name="rf-good")
+    bad_run_id = _create_completed_rf_inference_run(api, tmp_path, name="rf-bad")
+    bad_state = api.get_run_status(bad_run_id)
+    bad_predictions_dir = Path(str(bad_state.outputs.predictions_dir))
+    bad_summary = read_json(bad_predictions_dir / "prediction_summary.json")
+    bad_summary["rf_filter_summary"]["files"][0]["rf_filtered_file"] = str(
+        bad_predictions_dir / "missing_rf_filtered.json"
+    )
+    write_json(bad_predictions_dir / "prediction_summary.json", bad_summary)
+
+    result = api.backfill_rf_inference_partitions()
+
+    assert good_run_id in result.migrated
+    assert any(item["run_id"] == bad_run_id for item in result.failed)
+
+
+def test_backfill_rf_inference_partitions_can_target_single_run(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    target_run_id = _create_completed_rf_inference_run(api, tmp_path, name="rf-target")
+    other_run_id = _create_completed_rf_inference_run(api, tmp_path, name="rf-other")
+
+    summary = api.backfill_rf_inference_partitions(run_id=target_run_id)
+
+    assert summary.scanned == 1
+    assert summary.migrated == [target_run_id]
+    assert other_run_id not in summary.migrated
+    assert summary.failed == []
 
 
 def test_fail_workflow_operation_marks_pending_job_failed(
