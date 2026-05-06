@@ -500,6 +500,44 @@ def test_prediction_review_export_json_writes_single_json_document(
     assert payload["n_items"] == 1
 
 
+def test_prediction_review_export_flat_snippets_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        export_prediction_review_flat_snippets_bundle=lambda manifest_path, output_dir: {
+            "prediction_run_id": "run-1",
+            "session_id": "session-1",
+            "output_dir": "/tmp/out",
+            "manifest_path": "/tmp/out/snippets_manifest.json",
+            "summary_path": "/tmp/out/summary.json",
+            "n_items": 2,
+            "estimated_size_bytes": 1024,
+            "items": [],
+        }
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "prediction-review-export-flat-snippets",
+            "--manifest",
+            "/tmp/session.json",
+            "--output-dir",
+            "/tmp/out",
+            "--json",
+        ],
+    )
+    main()
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["n_items"] == 2
+    assert payload["manifest_path"].endswith("snippets_manifest.json")
+
+
 def test_prediction_review_materialize_curated_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
