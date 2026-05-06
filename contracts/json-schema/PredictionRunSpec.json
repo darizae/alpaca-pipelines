@@ -36,7 +36,7 @@
           "type": "integer"
         },
         "min_duration_s": {
-          "default": 0.4,
+          "default": 0.5,
           "title": "Min Duration S",
           "type": "number"
         },
@@ -52,12 +52,12 @@
           "type": "string"
         },
         "n_fft": {
-          "default": 2048,
+          "default": 4096,
           "title": "N Fft",
           "type": "integer"
         },
         "hop_length": {
-          "default": 1024,
+          "default": 2048,
           "title": "Hop Length",
           "type": "integer"
         },
@@ -72,12 +72,12 @@
           "type": "boolean"
         },
         "fmin_hz": {
-          "default": 0.0,
+          "default": 50.0,
           "title": "Fmin Hz",
           "type": "number"
         },
         "fmax_hz": {
-          "default": 4000.0,
+          "default": 4500.0,
           "title": "Fmax Hz",
           "type": "number"
         }

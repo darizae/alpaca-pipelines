@@ -17,7 +17,7 @@ from alpaca_pipelines.datasets.manifest import (
     load_manifest,
     write_manifest,
 )
-from alpaca_pipelines.datasets.mining.mine_negatives import mine_negatives_for_positives
+from alpaca_pipelines.datasets.mining.mine_negatives import mine_negatives_to_target_count
 from alpaca_pipelines.datasets.paths import (
     SNIPPETS_DIR,
     SPLITS_DIR,
@@ -32,7 +32,6 @@ from alpaca_pipelines.datasets.selection.select_positives import (
 )
 from alpaca_pipelines.datasets.source_discovery import discover_source_files
 from alpaca_pipelines.datasets.splitting.strategies import apply_split
-from alpaca_pipelines.prediction.review.curated import curated_sources_root
 
 
 @dataclass(frozen=True)
@@ -127,12 +126,13 @@ def build_dataset(
         "curated_duplicates_crossed_source_manifests": False,
     }
     curated_snippets: list[SnippetEntry] = []
-    if strategy_config.include_manual_review_curated:
+    manual_curated_filters = strategy_config.manual_review_curated_filters.model_dump()
+    if any(manual_curated_filters.values()):
         curated_snippets, curated_summary = select_curated_examples(
-            curated_root=curated_sources_root(datasets_root=datasets_root),
+            collection_root=collection_root,
             snippets_dir=snippets_dir,
             uid_counter=uid_counter,
-            filters=strategy_config.manual_review_curated_filters.model_dump(),
+            filters=manual_curated_filters,
             max_examples=strategy_config.manual_review_curated_max_examples,
             seed=strategy_config.seed,
             fs=fs,
@@ -160,33 +160,55 @@ def build_dataset(
             fs=fs,
         )
 
-    source_files = discover_source_files(
-        collection_root=collection_root,
-        collection_names=strategy_config.noise_collection_names,
-        source_category_dirs=strategy_config.noise_mining.source_category_dirs,
-        fs=fs,
-    )
-
-    mined_negatives = mine_negatives_for_positives(
-        positive_snippets=all_positive_snippets,
-        source_files=source_files,
-        noise_per_positive=strategy_config.noise_per_positive,
-        attempts_per_slot=strategy_config.noise_mining.attempts_per_slot,
-        snippets_dir=snippets_dir,
-        uid_counter=uid_counter,
-        seed=strategy_config.seed,
-        fs=fs,
-    )
-
     curated_noise_snippets = [
         snippet for snippet in curated_snippets if snippet.classification == "noise"
     ]
+    preferred_noise_snippets = [
+        *curated_noise_snippets,
+        *low_quality_negatives,
+    ]
+    desired_noise_count = _resolve_noise_target_count(
+        strategy_config=strategy_config,
+        positive_count=len(all_positive_snippets),
+    )
+
+    remaining_noise_slots = max(0, desired_noise_count - len(preferred_noise_snippets))
+    mined_negatives: list[SnippetEntry] = []
+    if strategy_config.noise_source_mode == "mined" and remaining_noise_slots > 0:
+        source_files = discover_source_files(
+            collection_root=collection_root,
+            collection_names=strategy_config.noise_collection_names,
+            source_category_dirs=strategy_config.noise_mining.source_category_dirs,
+            fs=fs,
+        )
+        mined_negatives = mine_negatives_to_target_count(
+            positive_snippets=all_positive_snippets,
+            source_files=source_files,
+            target_noise_count=remaining_noise_slots,
+            attempts_per_slot=strategy_config.noise_mining.attempts_per_slot,
+            snippets_dir=snippets_dir,
+            uid_counter=uid_counter,
+            seed=strategy_config.seed,
+            fs=fs,
+        )
+
+    selected_noise_snippets = [
+        *preferred_noise_snippets,
+        *mined_negatives,
+    ][:desired_noise_count]
+    if len(selected_noise_snippets) < desired_noise_count:
+        raise ValueError(
+            "Dataset build requires {} noise examples, but only {} are available "
+            "for noise_source_mode='{}'".format(
+                desired_noise_count,
+                len(selected_noise_snippets),
+                strategy_config.noise_source_mode,
+            )
+        )
 
     all_snippets = [
         *all_positive_snippets,
-        *curated_noise_snippets,
-        *low_quality_negatives,
-        *mined_negatives,
+        *selected_noise_snippets,
     ]
 
     split_result = apply_split(
@@ -229,6 +251,23 @@ def build_dataset(
         splits=split_counts,
         curated_summary=curated_summary,
     )
+
+
+def _resolve_noise_target_count(
+    *,
+    strategy_config: StrategyConfig,
+    positive_count: int,
+) -> int:
+    if strategy_config.noise_count_mode == "absolute":
+        assert strategy_config.noise_target_count is not None
+        return strategy_config.noise_target_count
+
+    whole = int(strategy_config.noise_per_positive)
+    fractional = strategy_config.noise_per_positive - whole
+    target_noise_count = positive_count * whole
+    if fractional > 0:
+        target_noise_count += int(round(positive_count * fractional))
+    return target_noise_count
 
 
 def prepare_review(dataset_dir: Path, fs: FileSystem = _DEFAULT_FS) -> ReviewPrepResult:
