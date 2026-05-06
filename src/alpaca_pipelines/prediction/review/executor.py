@@ -223,6 +223,10 @@ def export_prediction_review_artifacts(
         copied_items.append(
             {
                 "item_id": item.item_id,
+                "canonical_detection_id": item.canonical_detection_id,
+                "review_item_id": item.review_item_id,
+                "detection_index": item.detection_index,
+                "source_display_path": item.source_display_path,
                 "source": {
                     "spectrogram_png": str(source_spectrogram),
                     "clip_wav": str(source_clip),
@@ -276,8 +280,8 @@ def export_prediction_review_flat_snippets_bundle(
         shutil.copy2(source_clip, destination_clip)
         clip_size_bytes = destination_clip.stat().st_size
         total_clip_bytes += clip_size_bytes
-        source_display_path: str | None = None
-        if isinstance(item.payload_json, dict):
+        source_display_path = item.source_display_path
+        if source_display_path is None and isinstance(item.payload_json, dict):
             payload_display_path = item.payload_json.get("source_display_path")
             if isinstance(payload_display_path, str):
                 source_display_path = payload_display_path
@@ -291,6 +295,7 @@ def export_prediction_review_flat_snippets_bundle(
                 "start_s": item.start_s,
                 "end_s": item.end_s,
                 "detection_score": item.detection_score,
+                "canonical_detection_id": item.canonical_detection_id,
                 "detection_index": item.detection_index,
                 "review_item_id": item.review_item_id,
                 "source_collection_name": item.source_collection_name,
