@@ -13,10 +13,12 @@ Use one of:
 If `dx` is unavailable, do not assume shell functions are loaded. Use the executable on PATH or fall back to explicit raw commands.
 
 - Use `dx rg` for grep/ripgrep commands.
+- Use `dx files` for changed-file inventory. It intentionally does not use `distill`, because file paths and Git status codes must remain exact.
 - Use `dx test` for targeted test commands.
 - Use `dx lint` for lint/typecheck commands.
-- Use `dx check` for repo-wide checks.
-- Use `dx diff` for git diff summaries.
+- Use `dx check` for repo-wide checks (for example: `dx check pnpm check`).
+- Use `dx diff` for semantic git diff summaries after the raw file inventory is already known.
+- Do not use `dx diff` to determine which files changed.
 - Use `dx raw` or plain commands when exact raw output is required.
 
 For grep/ripgrep, do not send already-correct `path:line:text` output through `distill`.
