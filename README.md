@@ -206,9 +206,9 @@ Default values (also in [`configs/prediction_review_spectrogram_example.json`](c
 - `colormap="magma"`
 - labeled axes (`Time (s)`, `Frequency (kHz)`) and colorbar enabled
 
-Artifact layout is deterministic per prediction run/session:
+Artifact layout is deterministic per inference run/session (`prediction` or `rf_inference`):
 
-`ALPACA_RUNS_ROOT/prediction/<run_id>/outputs/manual_review/<session_id>/...`
+`ALPACA_RUNS_ROOT/<prediction|rf_inference>/<run_id>/outputs/manual_review/<session_id>/...`
 
 ### Standardizer workflow
 
