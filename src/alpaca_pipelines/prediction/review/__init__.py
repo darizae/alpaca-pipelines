@@ -10,8 +10,10 @@ from alpaca_pipelines.prediction.review.config import (
 from alpaca_pipelines.prediction.review.curated import (
     CuratedPredictionExportManifest,
     CuratedPredictionSourceManifest,
+    list_curated_prediction_categories,
     list_curated_prediction_sources,
     materialize_curated_prediction_examples,
+    migrate_legacy_curated_prediction_sources,
 )
 from alpaca_pipelines.prediction.review.executor import (
     concatenate_prediction_review_clips,
@@ -31,5 +33,7 @@ __all__ = [
     "concatenate_prediction_review_clips",
     "export_prediction_review_artifacts",
     "materialize_curated_prediction_examples",
+    "migrate_legacy_curated_prediction_sources",
+    "list_curated_prediction_categories",
     "list_curated_prediction_sources",
 ]

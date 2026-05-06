@@ -11,6 +11,7 @@ from alpaca_pipelines.datasets.contracts import SnippetEntry
 from alpaca_pipelines.datasets.fs import _DEFAULT_FS, FileSystem
 from alpaca_pipelines.datasets.selection.select_positives import _copy_wav
 from alpaca_pipelines.prediction.review.curated import (
+    CURATED_CATEGORY_NAMES,
     CURATED_MANIFEST_FILENAME,
     CuratedPredictionSourceItem,
     CuratedPredictionSourceManifest,
@@ -28,7 +29,7 @@ class _CuratedManifestItem(BaseModel):
 
 def select_curated_examples(
     *,
-    curated_root: Path,
+    collection_root: Path,
     snippets_dir: Path,
     uid_counter: count[int],
     filters: dict[str, list[str]] | None,
@@ -36,7 +37,7 @@ def select_curated_examples(
     seed: int,
     fs: FileSystem = _DEFAULT_FS,
 ) -> tuple[list[SnippetEntry], dict[str, int | str | bool]]:
-    manifest_items = _load_curated_manifest_items(curated_root, fs)
+    manifest_items = _load_curated_manifest_items(collection_root, fs)
     filtered_items = _apply_filters(manifest_items, filters)
     dedupe_result = _dedupe_items(filtered_items)
     selected_items = _limit_items(
@@ -98,12 +99,14 @@ class _DedupeResult(BaseModel):
     cross_manifest_duplicates: bool
 
 
-def _load_curated_manifest_items(curated_root: Path, fs: FileSystem) -> list[_CuratedManifestItem]:
-    if not fs.exists(curated_root):
+def _load_curated_manifest_items(
+    collection_root: Path, fs: FileSystem
+) -> list[_CuratedManifestItem]:
+    if not fs.exists(collection_root):
         return []
 
     manifest_items: list[_CuratedManifestItem] = []
-    for manifest_path in _find_manifest_paths(curated_root, fs):
+    for manifest_path in _find_manifest_paths(collection_root, fs):
         payload = fs.read_text(manifest_path)
         manifest = CuratedPredictionSourceManifest.model_validate_json(payload)
         for item in manifest.items:
@@ -115,9 +118,24 @@ def _find_manifest_paths(root: Path, fs: FileSystem) -> list[Path]:
     if not fs.is_dir(root):
         return []
     discovered: list[Path] = []
+    for collection_dir in sorted(fs.iterdir(root)):
+        if not fs.is_dir(collection_dir):
+            continue
+        for category_name in CURATED_CATEGORY_NAMES:
+            category_dir = collection_dir / category_name
+            if not fs.is_dir(category_dir):
+                continue
+            discovered.extend(_find_manifest_paths_under(category_dir, fs))
+    return discovered
+
+
+def _find_manifest_paths_under(root: Path, fs: FileSystem) -> list[Path]:
+    if not fs.is_dir(root):
+        return []
+    discovered: list[Path] = []
     for entry in sorted(fs.iterdir(root)):
         if fs.is_dir(entry):
-            discovered.extend(_find_manifest_paths(entry, fs))
+            discovered.extend(_find_manifest_paths_under(entry, fs))
         elif entry.name == CURATED_MANIFEST_FILENAME:
             discovered.append(entry)
     return discovered

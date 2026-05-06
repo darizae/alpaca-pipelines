@@ -481,7 +481,11 @@ def test_dataset_build_operation_completes(
                     n_snippets=11,
                     n_target=5,
                     n_noise=6,
-                    strategy_config={"include_manual_review_curated": True},
+                    strategy_config={
+                        "manual_review_curated_filters": {
+                            "collection_names": ["audio_collection_alpha"]
+                        }
+                    },
                     provenance_summary={"by_provenance_type": {"manual_review_curated": 2}},
                     manual_curation_summary={"total_examples": 2},
                 )
@@ -521,7 +525,9 @@ def test_dataset_build_operation_completes(
     assert persisted["result_summary"]["n_snippets"] == 11
     assert persisted["result_summary"]["n_target"] == 5
     assert persisted["result_summary"]["n_noise"] == 6
-    assert persisted["result_summary"]["strategy_config"]["include_manual_review_curated"] is True
+    assert persisted["result_summary"]["strategy_config"]["manual_review_curated_filters"] == {
+        "collection_names": ["audio_collection_alpha"]
+    }
     assert persisted["result_summary"]["manual_curation_summary"]["total_examples"] == 2
     assert persisted["result_summary"]["provenance_summary"]["by_provenance_type"] == {
         "manual_review_curated": 2

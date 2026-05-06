@@ -439,7 +439,7 @@ def _cmd_prediction_review_materialize_curated(args: argparse.Namespace) -> None
         return
 
     print("Curated prediction examples materialized.")
-    print("  Curated root: {}".format(payload["curated_source_root"]))
+    print("  Category roots: {}".format(payload["category_roots"]))
     print("  Run:          {}".format(payload["prediction_run_id"]))
     print("  Session:      {}".format(payload["review_session_id"]))
     print("  Total items:  {}".format(payload["total_items"]))
@@ -452,10 +452,10 @@ def _cmd_prediction_review_materialize_curated(args: argparse.Namespace) -> None
         print("  Manifest:     {}".format(manifest_path))
 
 
-def _cmd_curated_source_status(args: argparse.Namespace) -> None:
+def _cmd_curated_category_status(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
-        payload = api.list_curated_prediction_sources(
+        payload = api.list_curated_prediction_categories(
             destination_root=Path(args.destination_root) if args.destination_root else None,
         )
     except Exception as exc:
@@ -465,15 +465,40 @@ def _cmd_curated_source_status(args: argparse.Namespace) -> None:
         _emit_json(payload)
         return
 
-    print("Curated source status")
-    print("  Curated root: {}".format(payload["curated_source_root"]))
-    print("  Manifests:    {}".format(len(payload["manifests"])))
-    print("  By label:     {}".format(payload["counts_by_label"]))
-    print("  By collection: {}".format(payload["counts_by_collection"]))
+    print("Curated category status")
+    print("  Category roots: {}".format(payload["category_roots"]))
+    print("  Categories:     {}".format(", ".join(payload["category_names"])))
+    print("  Manifests:      {}".format(len(payload["manifests"])))
+    print("  By label:       {}".format(payload["counts_by_label"]))
+    print("  By collection:  {}".format(payload["counts_by_collection"]))
     if payload["warnings"]:
         print("  Warnings:")
         for warning in payload["warnings"]:
             print("    {}".format(warning))
+
+
+def _cmd_curated_migrate_legacy_root(args: argparse.Namespace) -> None:
+    api = _get_api()
+    try:
+        payload = api.migrate_legacy_curated_prediction_sources(
+            destination_root=Path(args.destination_root) if args.destination_root else None,
+            remove_legacy_root=bool(args.remove_legacy_root),
+        )
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    if args.json:
+        _emit_json(payload)
+        return
+
+    print("Legacy curated sources migrated.")
+    print("  Legacy root:    {}".format(payload["legacy_root"]))
+    print("  Removed legacy: {}".format(payload["removed_legacy_root"]))
+    print("  Category roots: {}".format(payload["category_roots"]))
+    print("  Created:        {}".format(payload["created_count"]))
+    print("  Updated:        {}".format(payload["updated_count"]))
+    print("  Skipped:        {}".format(payload["skipped_count"]))
+    print("  Total items:    {}".format(payload["total_items"]))
 
 
 def _cmd_standardizer_scan(args: argparse.Namespace) -> None:
@@ -752,9 +777,14 @@ def _build_parser() -> argparse.ArgumentParser:
     review_materialize_parser.add_argument("--destination-root", default=None)
     review_materialize_parser.add_argument("--json", action="store_true")
 
-    curated_status_parser = subparsers.add_parser("curated-source-status")
+    curated_status_parser = subparsers.add_parser("curated-category-status")
     curated_status_parser.add_argument("--destination-root", default=None)
     curated_status_parser.add_argument("--json", action="store_true")
+
+    curated_migrate_parser = subparsers.add_parser("curated-migrate-legacy-root")
+    curated_migrate_parser.add_argument("--destination-root", default=None)
+    curated_migrate_parser.add_argument("--remove-legacy-root", action="store_true")
+    curated_migrate_parser.add_argument("--json", action="store_true")
 
     standardizer_scan_parser = subparsers.add_parser("standardizer-scan")
     standardizer_scan_parser.add_argument("--json", action="store_true")
@@ -851,7 +881,8 @@ def main() -> None:
         "prediction-review-concat": _cmd_prediction_review_concat,
         "prediction-review-export": _cmd_prediction_review_export,
         "prediction-review-materialize-curated": _cmd_prediction_review_materialize_curated,
-        "curated-source-status": _cmd_curated_source_status,
+        "curated-category-status": _cmd_curated_category_status,
+        "curated-migrate-legacy-root": _cmd_curated_migrate_legacy_root,
         "standardizer-scan": _cmd_standardizer_scan,
         "standardizer-import": _cmd_standardizer_import,
         "standardizer-plan": _cmd_standardizer_plan,
