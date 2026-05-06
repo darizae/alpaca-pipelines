@@ -246,6 +246,51 @@ def test_prediction_review_concat_creates_single_review_wav_without_spectrogram_
     assert not (session_dir / "items").exists()
 
 
+def test_prediction_review_flat_snippets_export_writes_manifest_and_flat_wavs(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(api, audio_file=audio_file)
+    manifest_path = tmp_path / "review_manifest_flat.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_flat",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                    "source_collection_name": "audio_collection_a",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "nested/audio.wav",
+                },
+                {
+                    "item_id": "item_002",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.9,
+                    "end_s": 1.4,
+                },
+            ],
+        },
+    )
+    api.generate_prediction_review_batch(manifest_path=manifest_path)
+    payload = api.export_prediction_review_flat_snippets_bundle(manifest_path=manifest_path)
+    assert payload["n_items"] == 2
+    assert payload["estimated_size_bytes"] > 0
+    manifest_payload = read_json(Path(payload["manifest_path"]))
+    assert manifest_payload["mode"] == "flat_snippets_bundle"
+    assert manifest_payload["items"][0]["snippet_filename"] == "snippet_000000_item_001.wav"
+    assert manifest_payload["items"][1]["snippet_filename"] == "snippet_000001_item_002.wav"
+    assert manifest_payload["items"][0]["source_collection_name"] == "audio_collection_a"
+    assert Path(payload["output_dir"], "snippet_000000_item_001.wav").is_file()
+
+
 def test_materialize_curated_prediction_examples_and_status(
     tmp_path: Path,
 ) -> None:
@@ -292,6 +337,7 @@ def test_materialize_curated_prediction_examples_and_status(
     )
 
     assert payload["counts_by_label"] == {"target": 1, "noise": 0}
+    assert payload["category_names"] == ["hums_curated_manual_review"]
     assert payload["created_count"] == 1
     assert payload["updated_count"] == 0
     assert payload["skipped_count"] == 0
@@ -303,6 +349,7 @@ def test_materialize_curated_prediction_examples_and_status(
     assert curated_manifest["source_type"] == "manual_review_curated"
     assert curated_manifest["items"][0]["label"] == "target"
     assert Path(curated_manifest["items"][0]["snippet_wav_path"]).is_file()
+    assert "/hums_curated_manual_review/" in curated_manifest["items"][0]["snippet_wav_path"]
 
     second_payload = api.materialize_curated_prediction_examples(
         manifest_path=manifest_path,
@@ -312,9 +359,10 @@ def test_materialize_curated_prediction_examples_and_status(
     assert second_payload["updated_count"] == 0
     assert second_payload["skipped_count"] == 1
 
-    status = api.list_curated_prediction_sources()
+    status = api.list_curated_prediction_categories()
     assert status["counts_by_label"]["target"] == 1
     assert status["counts_by_provenance_type"]["manual_review_curated"] == 1
+    assert "hums_curated_manual_review" in status["category_names"]
 
 
 def test_materialize_curated_prediction_examples_accepts_curated_export_manifest(

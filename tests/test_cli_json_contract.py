@@ -500,15 +500,54 @@ def test_prediction_review_export_json_writes_single_json_document(
     assert payload["n_items"] == 1
 
 
+def test_prediction_review_export_flat_snippets_json_writes_single_json_document(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    api = SimpleNamespace(
+        export_prediction_review_flat_snippets_bundle=lambda manifest_path, output_dir: {
+            "prediction_run_id": "run-1",
+            "session_id": "session-1",
+            "output_dir": "/tmp/out",
+            "manifest_path": "/tmp/out/snippets_manifest.json",
+            "summary_path": "/tmp/out/summary.json",
+            "n_items": 2,
+            "estimated_size_bytes": 1024,
+            "items": [],
+        }
+    )
+    monkeypatch.setattr("alpaca_pipelines.cli._get_api", lambda: api)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "alpaca-pipelines",
+            "prediction-review-export-flat-snippets",
+            "--manifest",
+            "/tmp/session.json",
+            "--output-dir",
+            "/tmp/out",
+            "--json",
+        ],
+    )
+    main()
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    payload = json.loads(captured.out)
+    assert payload["n_items"] == 2
+    assert payload["manifest_path"].endswith("snippets_manifest.json")
+
+
 def test_prediction_review_materialize_curated_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     api = SimpleNamespace(
         materialize_curated_prediction_examples=lambda **_: {
-            "curated_source_root": "/datasets/_curated_prediction_examples",
+            "category_roots": {"hums_curated_manual_review": "/collections"},
+            "category_names": ["hums_curated_manual_review"],
             "manifest_paths": [
-                "/datasets/_curated_prediction_examples/audio_collection_a/run-1/session-1/manifest.json"
+                "/collections/audio_collection_a/hums_curated_manual_review/401/manifest.json"
             ],
             "prediction_run_id": "run-1",
             "review_session_id": "session-1",
@@ -553,7 +592,8 @@ def test_prediction_review_materialize_curated_accepts_curated_export_manifest_m
     def _materialize_curated_prediction_examples(**kwargs: object) -> dict[str, object]:
         called.update(kwargs)
         return {
-            "curated_source_root": "/datasets/_curated_prediction_examples",
+            "category_roots": {"hums_curated_manual_review": "/collections"},
+            "category_names": ["hums_curated_manual_review"],
             "manifest_paths": [],
             "prediction_run_id": "run-1",
             "review_session_id": "session-1",
@@ -592,13 +632,14 @@ def test_prediction_review_materialize_curated_accepts_curated_export_manifest_m
     assert called["curated_export_manifest"] == Path("/tmp/curated-export.json")
 
 
-def test_curated_source_status_json_writes_single_json_document(
+def test_curated_category_status_json_writes_single_json_document(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     api = SimpleNamespace(
-        list_curated_prediction_sources=lambda destination_root: {
-            "curated_source_root": "/datasets/_curated_prediction_examples",
+        list_curated_prediction_categories=lambda destination_root: {
+            "category_roots": {"hums_curated_manual_review": "/collections"},
+            "category_names": ["hums_curated_manual_review", "curated_noise_segmented"],
             "manifests": [],
             "counts_by_collection": {},
             "counts_by_label": {},
@@ -612,7 +653,7 @@ def test_curated_source_status_json_writes_single_json_document(
         "argv",
         [
             "alpaca-pipelines",
-            "curated-source-status",
+            "curated-category-status",
             "--json",
         ],
     )
@@ -622,4 +663,4 @@ def test_curated_source_status_json_writes_single_json_document(
     captured = capsys.readouterr()
     assert captured.err == ""
     payload = json.loads(captured.out)
-    assert payload["curated_source_root"] == "/datasets/_curated_prediction_examples"
+    assert payload["category_roots"]["hums_curated_manual_review"] == "/collections"

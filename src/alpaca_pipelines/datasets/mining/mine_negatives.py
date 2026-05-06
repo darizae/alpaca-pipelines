@@ -81,6 +81,50 @@ def mine_negatives_for_positives(
     return mined
 
 
+def mine_negatives_to_target_count(
+    positive_snippets: list[SnippetEntry],
+    source_files: list[SourceAudioFile],
+    target_noise_count: int,
+    attempts_per_slot: int,
+    snippets_dir: Path,
+    uid_counter: count[int],
+    seed: int,
+    fs: FileSystem = _DEFAULT_FS,
+) -> list[SnippetEntry]:
+    rng = random.Random(seed)
+
+    if target_noise_count <= 0:
+        return []
+    if not positive_snippets:
+        raise ValueError("Positive snippets are required to mine negatives")
+    if not source_files:
+        raise ValueError("No source audio files available for mining negatives")
+
+    mined: list[SnippetEntry] = []
+    for index in range(target_noise_count):
+        positive = positive_snippets[index % len(positive_snippets)]
+        snippet_entry = _mine_single_slot(
+            target_duration=positive.duration_s,
+            source_files=source_files,
+            attempts_per_slot=attempts_per_slot,
+            snippets_dir=snippets_dir,
+            uid_counter=uid_counter,
+            rng=rng,
+            fs=fs,
+        )
+        if snippet_entry is None:
+            raise ValueError(
+                f"Noise mining underfill: requested {target_noise_count} slots, "
+                f"filled {len(mined)}. "
+                f"{target_noise_count - len(mined)} slots failed after "
+                f"{attempts_per_slot} attempts each. "
+                "Check source file durations vs. target snippet durations."
+            )
+        mined.append(snippet_entry)
+
+    return mined
+
+
 def _mine_single_slot(
     target_duration: float,
     source_files: list[SourceAudioFile],
