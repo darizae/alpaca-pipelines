@@ -65,11 +65,13 @@ class PredictionReviewSessionItem(BaseModel):
     start_s: float
     end_s: float
     detection_score: float | None = None
+    canonical_detection_id: int | None = None
     review_item_id: str | None = None
     detection_index: int | None = None
     source_collection_name: str | None = None
     source_category_dir: str | None = None
     source_relative_path: str | None = None
+    source_display_path: str | None = None
     source_recording_key: str | None = None
     payload_json: dict[str, object] | None = None
 
@@ -83,6 +85,8 @@ class PredictionReviewSessionItem(BaseModel):
             raise ValueError("start_s must be >= 0")
         if self.end_s <= self.start_s:
             raise ValueError("end_s must be > start_s")
+        if self.canonical_detection_id is not None and self.canonical_detection_id <= 0:
+            raise ValueError("canonical_detection_id must be > 0")
         if self.detection_index is not None and self.detection_index < 0:
             raise ValueError("detection_index must be >= 0")
         return self

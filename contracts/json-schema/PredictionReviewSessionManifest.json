@@ -32,6 +32,18 @@
           "default": null,
           "title": "Detection Score"
         },
+        "canonical_detection_id": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Canonical Detection Id"
+        },
         "review_item_id": {
           "anyOf": [
             {
@@ -91,6 +103,18 @@
           ],
           "default": null,
           "title": "Source Relative Path"
+        },
+        "source_display_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Display Path"
         },
         "source_recording_key": {
           "anyOf": [

@@ -266,9 +266,17 @@ def test_prediction_review_flat_snippets_export_writes_manifest_and_flat_wavs(
                     "audio_file": str(audio_file),
                     "start_s": 0.1,
                     "end_s": 0.7,
+                    "canonical_detection_id": 101,
+                    "review_item_id": "review-item-001",
+                    "detection_index": 0,
                     "source_collection_name": "audio_collection_a",
                     "source_category_dir": "raw_recordings",
                     "source_relative_path": "nested/audio.wav",
+                    "source_display_path": "audio_collection_a/raw_recordings/nested/audio.wav",
+                    "source_recording_key": "a_20250211_075558",
+                    "payload_json": {
+                        "source_display_path": "audio_collection_a/raw_recordings/nested/audio.wav"
+                    },
                 },
                 {
                     "item_id": "item_002",
@@ -288,6 +296,13 @@ def test_prediction_review_flat_snippets_export_writes_manifest_and_flat_wavs(
     assert manifest_payload["items"][0]["snippet_filename"] == "snippet_000000_item_001.wav"
     assert manifest_payload["items"][1]["snippet_filename"] == "snippet_000001_item_002.wav"
     assert manifest_payload["items"][0]["source_collection_name"] == "audio_collection_a"
+    assert manifest_payload["items"][0]["canonical_detection_id"] == 101
+    assert manifest_payload["items"][0]["review_item_id"] == "review-item-001"
+    assert (
+        manifest_payload["items"][0]["source_display_path"]
+        == "audio_collection_a/raw_recordings/nested/audio.wav"
+    )
+    assert manifest_payload["items"][0]["source_recording_key"] == "a_20250211_075558"
     assert Path(payload["output_dir"], "snippet_000000_item_001.wav").is_file()
 
 
