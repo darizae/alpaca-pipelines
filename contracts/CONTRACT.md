@@ -632,13 +632,13 @@ Hard rules:
 * Manual-review spectrogram config is a dedicated schema and MUST remain separate from training/evaluation spectrogram schemas.
 * Manifest `schema_version` MUST be `1`.
 * `session_id` and `item_id` values MUST be safe path segments.
-* Manifest `audio_file` values MUST be present in prediction `outputs/predictions/prediction_summary.json` for `prediction_run_id`.
+* Manifest `audio_file` values MUST be present in inference `outputs/predictions/prediction_summary.json` for `prediction_run_id` (`prediction` or `rf_inference` run type).
 
 ##### 5.5.5.2 Session artifact layout (required)
 
 Generated artifacts MUST be stored under:
 
-`ALPACA_RUNS_ROOT/prediction/<run_id>/outputs/manual_review/<session_id>/`
+`ALPACA_RUNS_ROOT/<prediction|rf_inference>/<run_id>/outputs/manual_review/<session_id>/`
 
 Required files:
 

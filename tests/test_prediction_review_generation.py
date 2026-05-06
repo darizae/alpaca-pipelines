@@ -49,8 +49,9 @@ def _prepare_completed_prediction_run(
     api: PipelineAPI,
     *,
     audio_file: Path,
+    run_type: str = "prediction",
 ) -> str:
-    run_state = api.run_manager.create_run("prediction", {"model_path": "/models/model.pt"})
+    run_state = api.run_manager.create_run(run_type, {"model_path": "/models/model.pt"})
     api.run_manager.mark_running(run_state.run_id)
     completed = api.run_manager.mark_completed(run_state.run_id)
 
@@ -246,6 +247,43 @@ def test_prediction_review_concat_creates_single_review_wav_without_spectrogram_
     assert not (session_dir / "items").exists()
 
 
+def test_prediction_review_concat_accepts_rf_inference_runs(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio_rf.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(
+        api,
+        audio_file=audio_file,
+        run_type="rf_inference",
+    )
+
+    manifest_path = tmp_path / "review_manifest_concat_rf.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_concat_rf",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                }
+            ],
+        },
+    )
+
+    payload = api.concatenate_prediction_review_clips(manifest_path=manifest_path)
+
+    assert payload["prediction_run_id"] == run_id
+    assert payload["n_items"] == 1
+    assert Path(payload["concat_wav"]).is_file()
+
+
 def test_prediction_review_flat_snippets_export_writes_manifest_and_flat_wavs(
     tmp_path: Path,
 ) -> None:
@@ -378,6 +416,59 @@ def test_materialize_curated_prediction_examples_and_status(
     assert status["counts_by_label"]["target"] == 1
     assert status["counts_by_provenance_type"]["manual_review_curated"] == 1
     assert "hums_curated_manual_review" in status["category_names"]
+
+
+def test_materialize_curated_prediction_examples_accepts_rf_inference_runs(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio_curated_rf.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(
+        api,
+        audio_file=audio_file,
+        run_type="rf_inference",
+    )
+
+    manifest_path = tmp_path / "review_manifest_curated_rf.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_curated_rf",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                    "source_collection_name": "audio_collection_alpha",
+                    "source_category_dir": "raw_recordings",
+                    "source_relative_path": "audio_curated_rf.wav",
+                    "source_recording_key": "401_20250211_075558",
+                }
+            ],
+        },
+    )
+    labels_path = tmp_path / "labels_rf.json"
+    write_json(
+        labels_path,
+        {
+            "schema_version": 1,
+            "labels": {
+                "item_001": "noise",
+            },
+        },
+    )
+
+    payload = api.materialize_curated_prediction_examples(
+        manifest_path=manifest_path,
+        labels_path=labels_path,
+    )
+
+    assert payload["prediction_run_id"] == run_id
+    assert payload["counts_by_label"] == {"target": 0, "noise": 1}
 
 
 def test_materialize_curated_prediction_examples_accepts_curated_export_manifest(

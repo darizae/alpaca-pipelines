@@ -29,6 +29,7 @@ _RAVEN_DIR = "raven"
 _RAVEN_CONCAT_FILENAME = "review_concat.wav"
 _FLAT_SNIPPETS_DIR = "flat_snippets_bundle"
 _FLAT_SNIPPETS_MANIFEST_FILENAME = "snippets_manifest.json"
+_REVIEW_ELIGIBLE_RUN_TYPES = {"prediction", "rf_inference"}
 
 
 def generate_prediction_review_preview(
@@ -354,11 +355,15 @@ def _resolve_spectrogram_config(
 
 def _resolve_prediction_run(run_manager: RunManager, run_id: str) -> RunState:
     run_state = run_manager.find_run(run_id)
-    if run_state.run_type != "prediction":
-        raise ValueError("Expected prediction run, got: {}".format(run_state.run_type))
+    if run_state.run_type not in _REVIEW_ELIGIBLE_RUN_TYPES:
+        raise ValueError(
+            "Expected inference run (prediction or rf_inference), got: {}".format(
+                run_state.run_type
+            )
+        )
     if run_state.status != "completed":
         raise ValueError(
-            "Prediction run must be completed for review generation, status: {}".format(
+            "Inference run must be completed for review generation, status: {}".format(
                 run_state.status
             )
         )

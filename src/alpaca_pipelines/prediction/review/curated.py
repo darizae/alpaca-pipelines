@@ -18,6 +18,7 @@ from alpaca_pipelines.runs.manager import RunManager
 
 CURATED_SOURCE_TYPE: Literal["manual_review_curated"] = "manual_review_curated"
 LEGACY_CURATED_ROOT_DIRNAME = "_curated_prediction_examples"
+_REVIEW_ELIGIBLE_RUN_TYPES = {"prediction", "rf_inference"}
 CURATED_MANIFEST_FILENAME = "manifest.json"
 CURATED_TARGET_CATEGORY = "hums_curated_manual_review"
 CURATED_NOISE_CATEGORY = "curated_noise_segmented"
@@ -611,11 +612,15 @@ def _load_curated_export_manifest(manifest_path: Path) -> CuratedPredictionExpor
 
 def _validate_prediction_run(run_manager: RunManager, prediction_run_id: str) -> None:
     run_state = run_manager.find_run(prediction_run_id)
-    if run_state.run_type != "prediction":
-        raise ValueError("Expected prediction run, got: {}".format(run_state.run_type))
+    if run_state.run_type not in _REVIEW_ELIGIBLE_RUN_TYPES:
+        raise ValueError(
+            "Expected inference run (prediction or rf_inference), got: {}".format(
+                run_state.run_type
+            )
+        )
     if run_state.status != "completed":
         raise ValueError(
-            "Prediction run must be completed for curated materialization, status: {}".format(
+            "Inference run must be completed for curated materialization, status: {}".format(
                 run_state.status
             )
         )
