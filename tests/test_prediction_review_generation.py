@@ -292,6 +292,7 @@ def test_materialize_curated_prediction_examples_and_status(
     )
 
     assert payload["counts_by_label"] == {"target": 1, "noise": 0}
+    assert payload["category_names"] == ["hums_curated_manual_review"]
     assert payload["created_count"] == 1
     assert payload["updated_count"] == 0
     assert payload["skipped_count"] == 0
@@ -303,6 +304,7 @@ def test_materialize_curated_prediction_examples_and_status(
     assert curated_manifest["source_type"] == "manual_review_curated"
     assert curated_manifest["items"][0]["label"] == "target"
     assert Path(curated_manifest["items"][0]["snippet_wav_path"]).is_file()
+    assert "/hums_curated_manual_review/" in curated_manifest["items"][0]["snippet_wav_path"]
 
     second_payload = api.materialize_curated_prediction_examples(
         manifest_path=manifest_path,
@@ -312,9 +314,10 @@ def test_materialize_curated_prediction_examples_and_status(
     assert second_payload["updated_count"] == 0
     assert second_payload["skipped_count"] == 1
 
-    status = api.list_curated_prediction_sources()
+    status = api.list_curated_prediction_categories()
     assert status["counts_by_label"]["target"] == 1
     assert status["counts_by_provenance_type"]["manual_review_curated"] == 1
+    assert "hums_curated_manual_review" in status["category_names"]
 
 
 def test_materialize_curated_prediction_examples_accepts_curated_export_manifest(

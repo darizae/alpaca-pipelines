@@ -446,15 +446,24 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
     (collection_root / "audio_collection_raw" / "raw_recordings").mkdir(parents=True)
     _write_wav(collection_root / "audio_collection_raw" / "raw_recordings" / "dummy.wav")
 
-    curated_root = datasets_root / "_curated_prediction_examples"
-    curated_session_dir = curated_root / "audio_collection_alpha" / "run-1" / "session-1"
-    snippets_dir = curated_session_dir / "snippets"
-    target_wav = snippets_dir / "target_item.wav"
-    noise_wav = snippets_dir / "noise_item.wav"
+    curated_target_dir = (
+        collection_root
+        / "audio_collection_alpha"
+        / "hums_curated_manual_review"
+        / "401_20250211_075558"
+    )
+    curated_noise_dir = (
+        collection_root
+        / "audio_collection_alpha"
+        / "curated_noise_segmented"
+        / "401_20250211_075558"
+    )
+    target_wav = curated_target_dir / "target_a.wav"
+    noise_wav = curated_noise_dir / "noise_b.wav"
     _write_wav(target_wav, duration_s=0.4)
     _write_wav(noise_wav, duration_s=0.4)
     write_json(
-        curated_session_dir / "manifest.json",
+        curated_target_dir / "manifest.json",
         {
             "schema_version": 1,
             "source_type": "manual_review_curated",
@@ -499,6 +508,29 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
                     "provenance_type": "manual_review_curated",
                     "payload_json": None,
                 },
+            ],
+        },
+    )
+    write_json(
+        curated_noise_dir / "manifest.json",
+        {
+            "schema_version": 1,
+            "source_type": "manual_review_curated",
+            "collection_name": "audio_collection_alpha",
+            "source_category_dir": "raw_recordings",
+            "source_relative_path": "401_20250211_075558.WAV",
+            "source_display_path": "audio_collection_alpha/raw_recordings/401_20250211_075558.WAV",
+            "source_recording_key": "401_20250211_075558",
+            "source_audio_file": str(
+                collection_root
+                / "audio_collection_alpha"
+                / "raw_recordings"
+                / "401_20250211_075558.WAV"
+            ),
+            "prediction_run_id": "run-1",
+            "review_session_id": "session-1",
+            "created_at": "2026-04-17T08:00:00Z",
+            "items": [
                 {
                     "curated_example_id": "b",
                     "review_item_id": "item-noise",
@@ -524,7 +556,7 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
                     "review_session_id": "session-1",
                     "provenance_type": "manual_review_curated",
                     "payload_json": None,
-                },
+                }
             ],
         },
     )
@@ -548,7 +580,9 @@ def test_dataset_build_can_use_manual_review_curated_sources_for_target_and_nois
             "review_gap_s": 0.5,
             "freq_low_hz": 0,
             "freq_high_hz": 4000,
-            "include_manual_review_curated": True,
+            "noise_source_mode": "collection",
+            "noise_count_mode": "absolute",
+            "noise_target_count": 1,
             "manual_review_curated_filters": {
                 "collection_names": ["audio_collection_alpha"],
                 "labels": ["target", "noise"],

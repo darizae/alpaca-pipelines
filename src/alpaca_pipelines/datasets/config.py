@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
@@ -29,17 +31,19 @@ class StrategyConfig(BaseModel):
 
     target_collection_names: list[str]
     noise_collection_names: list[str]
+    noise_source_mode: Literal["mined", "collection"] = "mined"
     split_strategy: str
     seed: int
     min_quality: int
+    noise_count_mode: Literal["ratio", "absolute"] = "ratio"
     noise_per_positive: float
+    noise_target_count: int | None = None
     noise_mining: NoiseMiningConfig
     split_fractions: tuple[float, float, float]
     duration_tolerance_s: float = 0.1
     review_gap_s: float = 0.5
     freq_low_hz: int = 0
     freq_high_hz: int = 4000
-    include_manual_review_curated: bool = False
     manual_review_curated_filters: ManualReviewCuratedFilters = Field(
         default_factory=lambda: ManualReviewCuratedFilters()
     )
@@ -74,6 +78,17 @@ class StrategyConfig(BaseModel):
             if not _is_safe_path_segment(category_dir):
                 raise ValueError(
                     "noise_mining.source_category_dirs entries must be safe path segments"
+                )
+
+        if self.noise_count_mode == "ratio":
+            if self.noise_per_positive <= 0:
+                raise ValueError("noise_per_positive must be > 0 when noise_count_mode is 'ratio'")
+            if self.noise_target_count is not None:
+                raise ValueError("noise_target_count must be null when noise_count_mode is 'ratio'")
+        else:
+            if self.noise_target_count is None or self.noise_target_count <= 0:
+                raise ValueError(
+                    "noise_target_count must be > 0 when noise_count_mode is 'absolute'"
                 )
 
         for fraction in self.split_fractions:

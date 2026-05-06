@@ -19,8 +19,9 @@ from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.review import PredictionReviewSpectrogramConfig
 from alpaca_pipelines.prediction.review.curated import (
-    list_curated_prediction_sources,
+    list_curated_prediction_categories,
     materialize_curated_prediction_examples,
+    migrate_legacy_curated_prediction_sources,
 )
 from alpaca_pipelines.rf.config import RfFeatureConfig
 from alpaca_pipelines.rf_inference.config import RfInferenceRunSpec
@@ -692,14 +693,34 @@ class PipelineAPI:
             destination_root=destination_root,
         )
 
+    def list_curated_prediction_categories(
+        self,
+        *,
+        destination_root: Path | None = None,
+    ) -> dict[str, Any]:
+        return list_curated_prediction_categories(
+            collection_root=self.environment.collection_root,
+            destination_root=destination_root,
+        )
+
     def list_curated_prediction_sources(
         self,
         *,
         destination_root: Path | None = None,
     ) -> dict[str, Any]:
-        return list_curated_prediction_sources(
+        return self.list_curated_prediction_categories(destination_root=destination_root)
+
+    def migrate_legacy_curated_prediction_sources(
+        self,
+        *,
+        destination_root: Path | None = None,
+        remove_legacy_root: bool = False,
+    ) -> dict[str, Any]:
+        return migrate_legacy_curated_prediction_sources(
+            collection_root=self.environment.collection_root,
             datasets_root=self.environment.datasets_root,
             destination_root=destination_root,
+            remove_legacy_root=remove_legacy_root,
         )
 
     def export_detections_to_selection_table(
