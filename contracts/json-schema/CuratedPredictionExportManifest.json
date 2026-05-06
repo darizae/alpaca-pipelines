@@ -3,6 +3,18 @@
     "CuratedPredictionExportItem": {
       "additionalProperties": false,
       "properties": {
+        "curated_example_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Curated Example Id"
+        },
         "review_item_id": {
           "title": "Review Item Id",
           "type": "string"

@@ -675,6 +675,22 @@ class PipelineAPI:
             item_id=item_id,
         )
 
+    def export_prediction_review_flat_snippets_bundle(
+        self,
+        *,
+        manifest_path: Path,
+        output_dir: Path | None = None,
+    ) -> dict[str, Any]:
+        from alpaca_pipelines.prediction.review.executor import (
+            export_prediction_review_flat_snippets_bundle,
+        )
+
+        return export_prediction_review_flat_snippets_bundle(
+            run_manager=self.run_manager,
+            manifest_path=manifest_path,
+            output_dir=output_dir,
+        )
+
     def materialize_curated_prediction_examples(
         self,
         *,
