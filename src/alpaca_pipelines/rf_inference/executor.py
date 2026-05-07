@@ -14,6 +14,7 @@ from alpaca_pipelines.io_utils import read_json, write_json
 from alpaca_pipelines.rf.executor import apply_rf_filter
 from alpaca_pipelines.rf_inference.config import RfInferenceRunSpec
 from alpaca_pipelines.runs.manager import RunManager
+from alpaca_pipelines.runs.review_index import write_review_index_summary
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +166,12 @@ def execute_rf_inference(
             "files": normalized_files,
         }
         write_json(predictions_dir / "prediction_summary.json", summary)
+        review_index_path = write_review_index_summary(
+            run_id=run_state.run_id,
+            run_type=run_state.run_type,
+            predictions_dir=predictions_dir,
+            prediction_summary=summary,
+        )
         _emit_progress(
             force=True,
             stage="completed",
@@ -174,7 +181,11 @@ def execute_rf_inference(
             current_file_windows_completed=None,
             detections_so_far=summary["total_detections"],
         )
-        run_manager.update_outputs(run_state.run_id, rf_filtered=True)
+        run_manager.update_outputs(
+            run_state.run_id,
+            rf_filtered=True,
+            prediction_review_index_summary_path=str(review_index_path),
+        )
         return run_manager.mark_completed(run_state.run_id)
     except Exception as exc:
         error_message = "{}: {}".format(type(exc).__name__, exc)

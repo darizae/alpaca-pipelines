@@ -193,6 +193,18 @@
           "default": null,
           "title": "Prediction Selection Tables Summary Path"
         },
+        "prediction_review_index_summary_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prediction Review Index Summary Path"
+        },
         "evaluation_dir": {
           "anyOf": [
             {

@@ -349,6 +349,34 @@ def _cmd_backfill_rf_inference_partitions(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _cmd_backfill_review_index_summaries(args: argparse.Namespace) -> None:
+    api = _get_api()
+    runs_root = Path(args.runs_root) if args.runs_root else None
+    try:
+        summary = api.backfill_review_index_summaries(runs_root=runs_root, run_id=args.run_id)
+    except Exception as exc:
+        _exit_with_error(exc)
+
+    payload = summary.to_dict()
+    has_failures = bool(summary.failed)
+    if args.json:
+        _emit_json(payload)
+        if has_failures:
+            sys.exit(1)
+        return
+
+    print("Review index summary backfill complete.")
+    print("  Scanned: {}".format(payload["scanned"]))
+    print("  Migrated: {}".format(payload["n_migrated"]))
+    print("  Skipped: {}".format(payload["n_skipped"]))
+    print("  Failed: {}".format(payload["n_failed"]))
+    if has_failures:
+        print("  Failures:")
+        for item in summary.failed:
+            print("    {}: {}".format(item.get("run_id", "<unknown>"), item.get("error", "")))
+        sys.exit(1)
+
+
 def _cmd_prediction_review_preview(args: argparse.Namespace) -> None:
     api = _get_api()
     try:
@@ -805,6 +833,13 @@ def _build_parser() -> argparse.ArgumentParser:
     rf_backfill_parser.add_argument("--runs-root", default=None)
     rf_backfill_parser.add_argument("--run-id", default=None)
     rf_backfill_parser.add_argument("--json", action="store_true")
+    review_index_backfill_parser = subparsers.add_parser(
+        "backfill-review-index-summaries",
+        help="Backfill compact review index summary artifacts for inference runs",
+    )
+    review_index_backfill_parser.add_argument("--runs-root", default=None)
+    review_index_backfill_parser.add_argument("--run-id", default=None)
+    review_index_backfill_parser.add_argument("--json", action="store_true")
 
     review_preview_parser = subparsers.add_parser("prediction-review-preview")
     review_preview_parser.add_argument("--manifest", required=True)
@@ -942,6 +977,7 @@ def main() -> None:
         "export-selection-tables": _cmd_export_selection_tables,
         "migrate-backend-meta": _cmd_migrate_backend_meta,
         "backfill-rf-inference-partitions": _cmd_backfill_rf_inference_partitions,
+        "backfill-review-index-summaries": _cmd_backfill_review_index_summaries,
         "prediction-review-preview": _cmd_prediction_review_preview,
         "prediction-review-generate": _cmd_prediction_review_generate,
         "prediction-review-concat": _cmd_prediction_review_concat,
