@@ -344,6 +344,41 @@ def test_prediction_review_flat_snippets_export_writes_manifest_and_flat_wavs(
     assert Path(payload["output_dir"], "snippet_000000_item_001.wav").is_file()
 
 
+def test_prediction_review_flat_snippets_export_overwrites_existing_targets(
+    tmp_path: Path,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(api, audio_file=audio_file)
+    manifest_path = tmp_path / "review_manifest_flat_retry.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_flat_retry",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.1,
+                    "end_s": 0.7,
+                }
+            ],
+        },
+    )
+    api.generate_prediction_review_batch(manifest_path=manifest_path)
+    first = api.export_prediction_review_flat_snippets_bundle(manifest_path=manifest_path)
+    snippet_path = Path(first["output_dir"], "snippet_000000_item_001.wav")
+    assert snippet_path.is_file()
+    snippet_path.write_bytes(b"stale")
+    second = api.export_prediction_review_flat_snippets_bundle(manifest_path=manifest_path)
+    assert second["n_items"] == 1
+    assert snippet_path.is_file()
+    assert snippet_path.read_bytes() != b"stale"
+
+
 def test_materialize_curated_prediction_examples_and_status(
     tmp_path: Path,
 ) -> None:

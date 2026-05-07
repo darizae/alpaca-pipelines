@@ -276,8 +276,10 @@ def export_prediction_review_flat_snippets_bundle(
             raise FileNotFoundError("Missing review clip: {}".format(source_clip))
         clip_filename = "snippet_{:06d}_{}.wav".format(item_index, item.item_id)
         destination_clip = package_dir / clip_filename
-        if destination_clip.exists():
+        if destination_clip.exists() and destination_clip.is_dir():
             raise FileExistsError("Export target already exists: {}".format(destination_clip))
+        if destination_clip.exists():
+            destination_clip.unlink()
         shutil.copy2(source_clip, destination_clip)
         clip_size_bytes = destination_clip.stat().st_size
         total_clip_bytes += clip_size_bytes
