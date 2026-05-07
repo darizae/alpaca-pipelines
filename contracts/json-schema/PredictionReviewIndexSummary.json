@@ -1,0 +1,120 @@
+{
+  "$defs": {
+    "ReviewIndexSummaryFileEntry": {
+      "description": "Per-audio-file metadata in review_index_summary.json.",
+      "properties": {
+        "audio_file": {
+          "title": "Audio File",
+          "type": "string"
+        },
+        "n_windows": {
+          "title": "N Windows",
+          "type": "integer"
+        },
+        "n_detections": {
+          "title": "N Detections",
+          "type": "integer"
+        },
+        "rf_partitions": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rf Partitions"
+        }
+      },
+      "required": [
+        "audio_file",
+        "n_windows",
+        "n_detections"
+      ],
+      "title": "ReviewIndexSummaryFileEntry",
+      "type": "object"
+    }
+  },
+  "description": "Compact summary artifact for metadata-first review/index surfaces.",
+  "properties": {
+    "generated_at": {
+      "title": "Generated At",
+      "type": "string"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "run_type": {
+      "enum": [
+        "training",
+        "prediction",
+        "evaluation",
+        "rf_training",
+        "rf_inference"
+      ],
+      "title": "Run Type",
+      "type": "string"
+    },
+    "predictions_dir": {
+      "title": "Predictions Dir",
+      "type": "string"
+    },
+    "prediction_summary_path": {
+      "title": "Prediction Summary Path",
+      "type": "string"
+    },
+    "rf_filtered": {
+      "title": "Rf Filtered",
+      "type": "boolean"
+    },
+    "n_files": {
+      "title": "N Files",
+      "type": "integer"
+    },
+    "total_detections": {
+      "title": "Total Detections",
+      "type": "integer"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/ReviewIndexSummaryFileEntry"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "rf_partition_totals": {
+      "anyOf": [
+        {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rf Partition Totals"
+    }
+  },
+  "required": [
+    "generated_at",
+    "run_id",
+    "run_type",
+    "predictions_dir",
+    "prediction_summary_path",
+    "rf_filtered",
+    "n_files",
+    "total_detections",
+    "files"
+  ],
+  "title": "PredictionReviewIndexSummary",
+  "type": "object"
+}

@@ -122,6 +122,9 @@ class RunManager:
             outputs.prediction_selection_tables_summary_path = str(
                 selection_tables_dir / PREDICTION_SELECTION_TABLES_SUMMARY_FILENAME
             )
+            outputs.prediction_review_index_summary_path = str(
+                run_dir / OUTPUTS_DIR / PREDICTIONS_DIR / "review_index_summary.json"
+            )
         if run_type == "evaluation":
             outputs.evaluation_dir = str(run_dir / OUTPUTS_DIR / EVALUATION_DIR)
 

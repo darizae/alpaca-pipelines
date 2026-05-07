@@ -610,6 +610,40 @@ Hard rules:
 * The `files` array MUST have exactly one entry per `prediction_summary.json` file entry.
 * The system MUST fail immediately if any output `.txt` path already exists.
 
+#### 5.5.4B Review index summary JSON contract (additive)
+
+Inference runs (`prediction` and `rf_inference`) MUST write:
+
+* `review_index_summary.json`
+
+at:
+
+`ALPACA_RUNS_ROOT/<prediction|rf_inference>/<run_id>/outputs/predictions/review_index_summary.json`
+
+Top-level JSON object with fields:
+
+* `generated_at`: string (ISO8601 Z)
+* `run_id`: string
+* `run_type`: `"prediction"` | `"rf_inference"`
+* `predictions_dir`: string (absolute path)
+* `prediction_summary_path`: string (absolute path)
+* `rf_filtered`: bool
+* `n_files`: int
+* `total_detections`: int
+* `files`: array of objects:
+  * `audio_file`: string
+  * `n_windows`: int
+  * `n_detections`: int
+  * optional `rf_partitions`: object with keys `accepted`, `rejected`, `unscored` (int)
+* optional `rf_partition_totals`: object with keys `accepted`, `rejected`, `unscored` (int)
+
+Hard rules:
+
+* `n_files` MUST equal the length of `files`.
+* The `files` inventory MUST be derived from `prediction_summary.json` `files`.
+* This artifact is additive and MUST NOT change existing `prediction_summary.json` or per-file prediction JSON contracts.
+* Legacy runs missing this artifact MAY be backfilled via `backfill-review-index-summaries`.
+
 #### 5.5.5 Prediction manual-review artifacts contract (required)
 
 This section specifies the persisted manual-review generation/export interface for completed prediction runs.
