@@ -27,6 +27,7 @@ from alpaca_pipelines.prediction.audio_sources import (
 )
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.runs.manager import RunManager
+from alpaca_pipelines.runs.review_index import write_review_index_summary
 from bioacoustics_dl_toolbox.audio.datasets import StridedAudioDataset
 from bioacoustics_dl_toolbox.config import (
     ClassifierConfig,
@@ -446,6 +447,16 @@ def execute_prediction(
         if rf_filter_summary is not None:
             summary["rf_filter_summary"] = rf_filter_summary
         write_json(predictions_dir / "prediction_summary.json", summary)
+        review_index_path = write_review_index_summary(
+            run_id=run_state.run_id,
+            run_type=run_state.run_type,
+            predictions_dir=predictions_dir,
+            prediction_summary=summary,
+        )
+        run_manager.update_outputs(
+            run_state.run_id,
+            prediction_review_index_summary_path=str(review_index_path),
+        )
 
         prediction_logger.info(
             "Prediction complete: {} files, {} total detections".format(
