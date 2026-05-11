@@ -284,6 +284,51 @@ def test_prediction_review_concat_accepts_rf_inference_runs(
     assert Path(payload["concat_wav"]).is_file()
 
 
+def test_prediction_review_concat_streams_without_np_concatenate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    api = _build_api(tmp_path)
+    audio_file = tmp_path / "audio_streaming.wav"
+    _write_test_audio(audio_file)
+    run_id = _prepare_completed_prediction_run(api, audio_file=audio_file)
+
+    manifest_path = tmp_path / "review_manifest_streaming.json"
+    write_json(
+        manifest_path,
+        {
+            "schema_version": 1,
+            "prediction_run_id": run_id,
+            "session_id": "session_streaming",
+            "items": [
+                {
+                    "item_id": "item_001",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.0,
+                    "end_s": 0.3,
+                },
+                {
+                    "item_id": "item_002",
+                    "audio_file": str(audio_file),
+                    "start_s": 0.3,
+                    "end_s": 0.6,
+                },
+            ],
+        },
+    )
+
+    monkeypatch.setattr(
+        np,
+        "concatenate",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not concatenate")),
+    )
+
+    payload = api.concatenate_prediction_review_clips(manifest_path=manifest_path)
+
+    assert payload["n_items"] == 2
+    assert Path(payload["concat_wav"]).is_file()
+
+
 def test_prediction_review_flat_snippets_export_writes_manifest_and_flat_wavs(
     tmp_path: Path,
 ) -> None:

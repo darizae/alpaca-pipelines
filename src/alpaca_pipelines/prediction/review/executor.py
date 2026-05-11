@@ -121,45 +121,44 @@ def concatenate_prediction_review_clips(
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    audio_cache: dict[str, tuple[np.ndarray, int]] = {}
-    segments: list[np.ndarray] = []
     offsets: list[dict[str, float | str]] = []
     samplerate: int | None = None
     current_offset = 0.0
-    for item in manifest.items:
-        cached_audio = audio_cache.get(item.audio_file)
-        if cached_audio is None:
-            cached_audio = _load_mono_audio(Path(item.audio_file))
-            audio_cache[item.audio_file] = cached_audio
-        mono_audio, item_samplerate = cached_audio
-        if samplerate is None:
-            samplerate = item_samplerate
-        elif item_samplerate != samplerate:
-            raise ValueError(
-                "All prediction review clips must have the same sample rate for concatenation"
+    output_handle: sf.SoundFile | None = None
+    try:
+        for item in manifest.items:
+            clip, item_samplerate = _load_item_clip(Path(item.audio_file), item=item)
+            if samplerate is None:
+                samplerate = item_samplerate
+                output_handle = sf.SoundFile(
+                    output_path,
+                    mode="w",
+                    samplerate=samplerate,
+                    channels=1,
+                )
+            elif item_samplerate != samplerate:
+                raise ValueError(
+                    "All prediction review clips must have the same sample rate for concatenation"
+                )
+            assert output_handle is not None
+            clip_duration_s = float(clip.shape[0]) / float(item_samplerate)
+            begin_time_s = current_offset
+            end_time_s = begin_time_s + clip_duration_s
+            offsets.append(
+                {
+                    "item_id": item.item_id,
+                    "begin_time_s": begin_time_s,
+                    "end_time_s": end_time_s,
+                }
             )
-        clip, _, _ = _extract_item_clip(
-            item=item,
-            mono_audio=mono_audio,
-            sample_rate=item_samplerate,
-        )
-        clip_duration_s = float(clip.shape[0]) / float(item_samplerate)
-        begin_time_s = current_offset
-        end_time_s = begin_time_s + clip_duration_s
-        offsets.append(
-            {
-                "item_id": item.item_id,
-                "begin_time_s": begin_time_s,
-                "end_time_s": end_time_s,
-            }
-        )
-        segments.append(clip)
-        current_offset = end_time_s
+            output_handle.write(clip)
+            current_offset = end_time_s
+    finally:
+        if output_handle is not None:
+            output_handle.close()
 
-    if samplerate is None or not segments:
+    if samplerate is None or output_handle is None:
         raise ValueError("Prediction review manifest has no clips to concatenate")
-    concatenated = np.concatenate(segments)
-    sf.write(output_path, concatenated.astype(np.float32), samplerate)
 
     return {
         "prediction_run_id": manifest.prediction_run_id,
@@ -607,6 +606,59 @@ def _load_mono_audio(audio_file: Path) -> tuple[np.ndarray, int]:
         raise ValueError("Audio file is empty: {}".format(audio_file))
     mono_audio = np.mean(audio, axis=1)
     return mono_audio, int(sample_rate)
+
+
+def _load_item_clip(
+    audio_file: Path,
+    *,
+    item: PredictionReviewSessionItem,
+) -> tuple[np.ndarray, int]:
+    try:
+        with sf.SoundFile(audio_file) as handle:
+            total_samples = len(handle)
+            sample_rate = int(handle.samplerate)
+            start_sample = int(round(item.start_s * sample_rate))
+            end_sample = int(round(item.end_s * sample_rate))
+
+            if start_sample < 0:
+                raise ValueError(
+                    "start_s resolves to negative sample index: {}".format(item.start_s)
+                )
+            if end_sample > total_samples:
+                raise ValueError(
+                    "end_s resolves outside audio bounds: end_s={} total_samples={} "
+                    "sample_rate={}".format(
+                        item.end_s,
+                        total_samples,
+                        sample_rate,
+                    )
+                )
+            if end_sample <= start_sample:
+                raise ValueError(
+                    "Invalid clip bounds for item {}: start_s={} end_s={}".format(
+                        item.item_id,
+                        item.start_s,
+                        item.end_s,
+                    )
+                )
+
+            handle.seek(start_sample)
+            clip = handle.read(
+                frames=end_sample - start_sample,
+                dtype="float32",
+                always_2d=True,
+            )
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError("Failed to read audio file: {}".format(audio_file)) from exc
+
+    if clip.size == 0:
+        raise ValueError("Generated clip is empty for item: {}".format(item.item_id))
+    mono_clip = np.mean(clip, axis=1)
+    if mono_clip.size == 0:
+        raise ValueError("Generated clip is empty for item: {}".format(item.item_id))
+    return mono_clip.astype(np.float32, copy=False), sample_rate
 
 
 def _extract_item_clip(
