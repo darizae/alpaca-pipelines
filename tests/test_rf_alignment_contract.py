@@ -482,6 +482,9 @@ def test_apply_rf_filter_returns_impact_summary(tmp_path: Path) -> None:
     assert summary["rf_rejected"] == 0
     assert summary["rf_unscored"] == 0
     assert summary["files"][0]["rf_filtered_file"].endswith("audio_rf_filtered.json")
+    assert summary["files"][0]["rf_accepted_file"].endswith("audio_rf_accepted.json")
+    assert summary["files"][0]["rf_rejected_file"].endswith("audio_rf_rejected.json")
+    assert summary["files"][0]["rf_unscored_file"].endswith("audio_rf_unscored.json")
 
 
 def test_rf_filter_writes_filtered_artifact_for_empty_detection_files(tmp_path: Path) -> None:
@@ -576,6 +579,9 @@ def test_base_and_rf_filtered_outputs_both_remain_available(tmp_path: Path) -> N
 
     assert prediction_path.is_file()
     assert prediction_path.with_name(f"{prediction_path.stem}_rf_filtered.json").is_file()
+    assert prediction_path.with_name(f"{prediction_path.stem}_rf_accepted.json").is_file()
+    assert prediction_path.with_name(f"{prediction_path.stem}_rf_rejected.json").is_file()
+    assert prediction_path.with_name(f"{prediction_path.stem}_rf_unscored.json").is_file()
 
 
 def test_rf_filter_summary_counts_pass_reject_unscored(monkeypatch: Any, tmp_path: Path) -> None:
@@ -665,6 +671,13 @@ def test_rf_filter_summary_counts_pass_reject_unscored(monkeypatch: Any, tmp_pat
     assert summary["rejection_rate"] == 0.333333
     assert summary["pass_rate"] == 0.333333
     assert read_calls["count"] == 3
+    file_summary = summary["files"][0]
+    accepted_payload = read_json(Path(file_summary["rf_accepted_file"]))
+    rejected_payload = read_json(Path(file_summary["rf_rejected_file"]))
+    unscored_payload = read_json(Path(file_summary["rf_unscored_file"]))
+    assert len(accepted_payload["detections"]) == 1
+    assert len(rejected_payload["detections"]) == 1
+    assert len(unscored_payload["detections"]) == 1
 
 
 def test_rf_filter_rejects_legacy_cnn_logit_models(tmp_path: Path) -> None:

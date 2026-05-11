@@ -28,6 +28,14 @@ from alpaca_pipelines.rf_inference.config import RfInferenceRunSpec
 from alpaca_pipelines.rf_training.config import RfTrainingRunSpec
 from alpaca_pipelines.runs.manager import RunManager
 from alpaca_pipelines.runs.migration import MigrationSummary, migrate_backend_meta
+from alpaca_pipelines.runs.review_index_backfill import (
+    ReviewIndexBackfillSummary,
+    backfill_review_index_summaries,
+)
+from alpaca_pipelines.runs.rf_partition_backfill import (
+    RfInferencePartitionBackfillSummary,
+    backfill_rf_inference_partitions,
+)
 from alpaca_pipelines.slurm.config import SlurmConfig
 from alpaca_pipelines.slurm.generator import generate_slurm_script
 from alpaca_pipelines.training.config import TrainingRunSpec
@@ -413,6 +421,36 @@ class PipelineAPI:
         """Backfill legacy backend_meta.json fields into run_state.json."""
         target_root = runs_root if runs_root is not None else self.environment.runs_root
         return migrate_backend_meta(target_root, self.run_manager)
+
+    def backfill_rf_inference_partitions(
+        self,
+        *,
+        runs_root: Path | None = None,
+        run_id: str | None = None,
+    ) -> RfInferencePartitionBackfillSummary:
+        """Backfill RF inference accepted/rejected/unscored partition artifacts."""
+        target_root = runs_root if runs_root is not None else self.environment.runs_root
+        target_run_manager = (
+            self.run_manager
+            if target_root == self.environment.runs_root
+            else RunManager(target_root)
+        )
+        return backfill_rf_inference_partitions(target_run_manager, run_id=run_id)
+
+    def backfill_review_index_summaries(
+        self,
+        *,
+        runs_root: Path | None = None,
+        run_id: str | None = None,
+    ) -> ReviewIndexBackfillSummary:
+        """Backfill compact review index summary artifacts for inference runs."""
+        target_root = runs_root if runs_root is not None else self.environment.runs_root
+        target_run_manager = (
+            self.run_manager
+            if target_root == self.environment.runs_root
+            else RunManager(target_root)
+        )
+        return backfill_review_index_summaries(target_run_manager, run_id=run_id)
 
     # ------------------------------------------------------------------
     # Collection standardization / dataset workflows

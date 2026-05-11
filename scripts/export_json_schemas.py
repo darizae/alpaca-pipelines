@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from alpaca_pipelines.contracts import RunState
+from alpaca_pipelines.contracts import PredictionReviewIndexSummary, RunState
 from alpaca_pipelines.evaluation.config import EvaluationRunSpec
 from alpaca_pipelines.prediction.config import PredictionRunSpec
 from alpaca_pipelines.prediction.review import (
@@ -35,6 +35,7 @@ def main() -> None:
         "RfTrainingRunSpec": RfTrainingRunSpec,
         "SlurmConfig": SlurmConfig,
         "RunState": RunState,
+        "PredictionReviewIndexSummary": PredictionReviewIndexSummary,
     }
     for name, model in models.items():
         with (output_dir / f"{name}.json").open("w", encoding="utf-8") as handle:

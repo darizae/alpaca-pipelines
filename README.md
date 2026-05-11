@@ -146,6 +146,12 @@ make generate-slurm RUN_ID=<uuid>
 # Migrate legacy submission metadata into run_state.json
 alpaca-pipelines migrate-backend-meta --json
 
+# Backfill RF inference partition artifacts for completed historical runs
+alpaca-pipelines backfill-rf-inference-partitions --json
+
+# Backfill one RF inference run
+alpaca-pipelines backfill-rf-inference-partitions --run-id <uuid> --json
+
 # Generate a one-item manual-review preview from a session manifest
 alpaca-pipelines prediction-review-preview --manifest /path/to/session_manifest.json --item-id <item-id> --json
 
@@ -168,6 +174,7 @@ The UI-facing commands support `--json` and write exactly one JSON document to s
 - `generate-slurm`
 - `export-selection-tables`
 - `migrate-backend-meta`
+- `backfill-rf-inference-partitions`
 - `prediction-review-preview`
 - `prediction-review-generate`
 - `prediction-review-export`
@@ -206,9 +213,9 @@ Default values (also in [`configs/prediction_review_spectrogram_example.json`](c
 - `colormap="magma"`
 - labeled axes (`Time (s)`, `Frequency (kHz)`) and colorbar enabled
 
-Artifact layout is deterministic per prediction run/session:
+Artifact layout is deterministic per inference run/session (`prediction` or `rf_inference`):
 
-`ALPACA_RUNS_ROOT/prediction/<run_id>/outputs/manual_review/<session_id>/...`
+`ALPACA_RUNS_ROOT/<prediction|rf_inference>/<run_id>/outputs/manual_review/<session_id>/...`
 
 ### Standardizer workflow
 

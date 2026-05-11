@@ -172,6 +172,7 @@ class RunOutputs(BaseModel):
     predictions_dir: str | None = None
     prediction_selection_tables_dir: str | None = None
     prediction_selection_tables_summary_path: str | None = None
+    prediction_review_index_summary_path: str | None = None
     evaluation_dir: str | None = None
     summaries_dir: str | None = None
     tensorboard_dir: str | None = None
@@ -219,6 +220,30 @@ class RunState(BaseModel):
     error_message: str | None = None
     slurm_job_id: str | None = None
     run_dir: str = ""
+
+
+class ReviewIndexSummaryFileEntry(BaseModel):
+    """Per-audio-file metadata in review_index_summary.json."""
+
+    audio_file: str
+    n_windows: int
+    n_detections: int
+    rf_partitions: dict[str, int] | None = None
+
+
+class PredictionReviewIndexSummary(BaseModel):
+    """Compact summary artifact for metadata-first review/index surfaces."""
+
+    generated_at: str
+    run_id: str
+    run_type: RunType
+    predictions_dir: str
+    prediction_summary_path: str
+    rf_filtered: bool
+    n_files: int
+    total_detections: int
+    files: list[ReviewIndexSummaryFileEntry]
+    rf_partition_totals: dict[str, int] | None = None
 
 
 class WorkflowOperation(BaseModel):

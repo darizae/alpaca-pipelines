@@ -19,6 +19,7 @@ RUN_CONFIG ?=
         create-training-run create-prediction-run create-evaluation-run \
         execute-run list-runs inspect-run cancel-run \
         generate-slurm submit-run \
+        backfill-rf-inference-partitions \
         export-prediction-selection-tables clean-stale-workflow-job delete-failed-workflow-job \
         prediction-review-preview prediction-review-generate prediction-review-concat prediction-review-export \
         clean-run
@@ -101,6 +102,13 @@ inspect-run: env-check
 cancel-run: env-check
 	@test -n "$(RUN_ID)" || (echo "Usage: make cancel-run RUN_ID=<id>"; exit 1)
 	@$(VENV_PYTHON) -m alpaca_pipelines.cli cancel --run-id "$(RUN_ID)"
+
+backfill-rf-inference-partitions: env-check
+	@if [ -n "$(RUN_ID)" ]; then \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli backfill-rf-inference-partitions --run-id "$(RUN_ID)"; \
+	else \
+		$(VENV_PYTHON) -m alpaca_pipelines.cli backfill-rf-inference-partitions; \
+	fi
 
 # --- Post-processing ---
 
