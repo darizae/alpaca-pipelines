@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite the version-specific archived release."
+title: "Alpaca Pipelines: Bioacoustic Detection and Curation Workflows for Alpaca Hum Research"
+type: software
+authors:
+  - family-names: Ariza
+    given-names: Daniel
+abstract: >-
+  Software for standardizing field audio collections, preparing curated
+  bioacoustic datasets, training and evaluating CNN-based alpaca hum detectors,
+  running inference and random-forest filtering, generating manual-review
+  artifacts, postprocessing detections, and executing workflows with SLURM.
+version: 0.1.0
+license: GPL-3.0-only
+repository-code: "https://github.com/darizae/alpaca-pipelines"
+url: "https://github.com/darizae/alpaca-pipelines"

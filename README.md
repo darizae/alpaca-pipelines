@@ -4,6 +4,11 @@ HPC-side workflow host for Alpaca bioacoustics processing.
 Owns the contract, persistence, and execution boundary for collection standardization,
 dataset building, training, prediction, evaluation, RF training, and postprocessing.
 
+This repository contains the detection and curation software used to prepare an
+alpaca-hum research corpus. It does not contain the field recordings, GPS data,
+curated datasets, trained model weights, manual-review decisions, or generated
+research results.
+
 ## Scope
 
 - **Training** CNN-based hum detectors (ResNet encoder + classifier)
@@ -42,9 +47,12 @@ dataset building, training, prediction, evaluation, RF training, and postprocess
 │  └────────────┘ └────────────┘ └─────────────┘ │
 └─────────────────────────────────────────────────┘
 
-````
+```
 
 ## Installation
+
+Python 3.11 or newer is required. The Python dependencies are declared in
+`pyproject.toml`; `soundfile` also requires the platform `libsndfile` library.
 
 ```bash
 # Create and activate virtual environment
@@ -54,7 +62,7 @@ source .venv/bin/activate
 # Install alpaca-pipelines
 pip install -e ".[dev]"
 pre-commit install
-````
+```
 
 On the HPC, do not launch runs or workflow operations until the runtime preflight passes:
 
@@ -456,3 +464,40 @@ make typecheck  # Run mypy
 make test       # Run pytest
 make check      # fix, then mypy and pytest
 ```
+
+The non-mutating release checks are:
+
+```bash
+python -m pytest -q
+pre-commit run --all-files
+```
+
+The automated suite uses generated temporary fixtures and does not require the
+research dataset, model weights, a GPU, or an HPC account.
+
+## Reproducibility boundaries
+
+- Collection standardization, dataset building, training, prediction, RF
+  filtering, manual-review generation, and postprocessing require external
+  audio, labels/indexes, run state, or model artifacts supplied through the
+  documented `ALPACA_*` paths and JSON configs.
+- Inference requires a compatible trained CNN checkpoint; RF inference also
+  requires a compatible trained random-forest artifact.
+- The example files under `configs/` describe schemas and safe starting values;
+  they are not a bundled research dataset and cannot reproduce manuscript
+  results by themselves.
+- Local execution is supported. SLURM generation and submission additionally
+  require a site-specific scheduler configuration, a reachable HPC filesystem,
+  and user authorization for that cluster.
+- The separate research-data deposit is maintained by the data custodians. No
+  dataset DOI is asserted here.
+
+## Citation and license
+
+Citation metadata are in [`CITATION.cff`](CITATION.cff). Cite the exact archived
+software release used in a study; a version-specific DOI can be added after a
+GitHub release is archived.
+
+This software is licensed under the [GNU General Public License v3.0
+only](LICENSE). Bundled-code attributions and compatible upstream license
+notices are retained in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
