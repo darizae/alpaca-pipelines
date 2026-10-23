@@ -1,5 +1,7 @@
 # alpaca-pipelines
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23599879.svg)](https://doi.org/10.5281/zenodo.23599879)
+
 HPC-side workflow host for Alpaca bioacoustics processing.
 Owns the contract, persistence, and execution boundary for collection standardization,
 dataset building, training, prediction, evaluation, RF training, and postprocessing.
@@ -494,9 +496,9 @@ research dataset, model weights, a GPU, or an HPC account.
 
 ## Citation and license
 
-Citation metadata are in [`CITATION.cff`](CITATION.cff). Cite the exact archived
-software release used in a study; a version-specific DOI can be added after a
-GitHub release is archived.
+Citation metadata are in [`CITATION.cff`](CITATION.cff). Version 0.1.0 is
+archived on Zenodo as
+[`10.5281/zenodo.23599879`](https://doi.org/10.5281/zenodo.23599879).
 
 This software is licensed under the [GNU General Public License v3.0
 only](LICENSE). Bundled-code attributions and compatible upstream license
