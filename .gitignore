@@ -1,4 +1,5 @@
 .venv/
+.DS_Store
 
 .vscode/
 
@@ -8,8 +9,9 @@
 data_indexes/
 plans/
 reports/
+results/
 
 .idea/
 
-__pychache__/
+__pycache__/
 *pyc

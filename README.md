@@ -116,7 +116,7 @@ python3.11 -m venv .venv
 make runtime-check
 ```
 
-On the HPC, `/projects/extern/...` may resolve to a canonical `/cluster/...` path. That is acceptable as long as the venv and imported package still resolve to the same checkout.
+On an HPC, a project path may resolve to a different canonical mount path. That is acceptable as long as the venv and imported package still resolve to the same checkout.
 
 Do not launch `dataset-build`, `dataset-prepare-review`, `dataset-apply-review`, `standardizer-import`, `standardizer-scan`, `standardizer-plan`, `standardizer-apply`, or `standardizer-index` until this preflight succeeds.
 
