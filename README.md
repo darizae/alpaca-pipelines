@@ -501,3 +501,7 @@ GitHub release is archived.
 This software is licensed under the [GNU General Public License v3.0
 only](LICENSE). Bundled-code attributions and compatible upstream license
 notices are retained in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+## Agent-assisted setup
+
+[Open the agent setup page](https://darizae.github.io/alpaca-pipelines/) or [copy the plain-text prompt](docs/agent-setup.txt) into your coding agent. Review its proposed changes and verification results.

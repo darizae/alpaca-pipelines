@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Configure training, prediction, evaluation and workflow contracts for local or HPC execution.">
+<title>Alpaca Pipelines — Agent setup</title>
+<style>*{box-sizing:border-box} :root{color-scheme:light dark;--bg:#f8faf9;--panel:#fff;--ink:#192725;--muted:#52615e;--border:#d9e3df;--accent:#478377;--button:#192725;--button-ink:#fff} @media(prefers-color-scheme:dark){:root{--bg:#121817;--panel:#1b2422;--ink:#edf3f0;--muted:#b5c4bf;--border:#3b4844;--accent:#a5d5cb;--button:#edf3f0;--button-ink:#16201e}} body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif} a{color:inherit;text-underline-offset:3px} a:hover{color:var(--accent)} .shell{max-width:780px;margin:auto;padding:28px 24px 42px} header,footer,.prompt-head{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap} header{padding-bottom:18px;border-bottom:1px solid var(--border)} .wordmark{font-size:16px;font-weight:740;letter-spacing:-.025em}.brand-mark{display:inline-block;background:var(--accent);width:10px;height:10px;border-radius:3px;margin-right:9px}.nav{font-size:14px;color:var(--muted)} main{padding-top:clamp(40px,8vw,75px)} .eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--accent)} h1{font-size:clamp(33px,6vw,52px);line-height:1.08;letter-spacing:-.055em;margin:12px 0 18px;max-width:690px} .lede{color:var(--muted);max-width:630px;font-size:18px;margin:0 0 34px}.prompt-card{background:var(--panel);border:1px solid var(--border);border-radius:16px;box-shadow:0 8px 32px #00000006;overflow:hidden}.prompt-head{padding:16px 20px;border-bottom:1px solid var(--border)} h2{font-size:15px;margin:0}.prompt-label{font-size:12px;color:var(--muted)} pre{white-space:pre-wrap;overflow-wrap:anywhere;font:14px/1.7 ui-monospace,SFMono-Regular,Consolas,monospace;padding:20px;margin:0;tab-size:2}.actions{padding:0 20px 20px;display:flex;flex-direction:column;gap:10px} button{font:inherit;font-weight:650;background:var(--button);color:var(--button-ink);border:1px solid transparent;padding:12px;border-radius:9px;cursor:pointer;min-height:48px}button:hover{opacity:.86}button:disabled{opacity:.55;cursor:default} a:focus-visible,button:focus-visible,pre:focus-visible{outline:3px solid var(--accent);outline-offset:4px}.status{font-size:13px;color:var(--muted);min-height:1.6em;margin:0;text-align:center}.hint{font-size:14px;color:var(--muted);margin:18px 0 32px}.hint strong{color:var(--ink)} footer{border-top:1px solid var(--border);padding-top:18px;font-size:13px;color:var(--muted);justify-content:flex-start;gap:20px} @media(max-width:420px){.shell{padding:20px 16px 32px} .prompt-head,pre{padding:14px}.actions{padding:0 14px 14px}}</style>
+</head>
+<body>
+<div class="shell">
+<header><div class="wordmark"><span class="brand-mark" aria-hidden="true"></span>Alpaca Pipelines</div><a class="nav" href="https://github.com/darizae/alpaca-pipelines">GitHub repository ↗</a></header>
+<main>
+<div class="eyebrow">Python · Bioacoustics · HPC</div>
+<h1>Set up a reproducible bioacoustics pipeline.</h1>
+<p class="lede">Configure training, prediction, evaluation and workflow contracts for local or HPC execution.</p>
+<section class="prompt-card" aria-labelledby="prompt-heading">
+<div class="prompt-head"><h2 id="prompt-heading">Give this to your coding agent</h2><span class="prompt-label">SETUP PROMPT</span></div>
+<pre id="setup-prompt" tabindex="0">Set up alpaca-pipelines in a fresh isolated environment. Read https://github.com/darizae/alpaca-pipelines#readme and its installation, configuration and runtime preflight instructions. Verify Python 3.11+, libsndfile and relevant dependencies. Configure only disposable local ALPACA_* paths and a private .env; do not touch existing collections, datasets, runs or HPC configuration. Run the documented environment/runtime checks where their prerequisites are satisfied and verify CLI help. Explain how to connect my own data or SLURM environment; do not submit jobs, modify real recordings, run training or migrations, or access private research data without explicit approval. Report all blockers and actual checks.
+
+Before changing anything, inspect the working tree and existing documentation. Keep changes scoped and reversible; do not overwrite user work, expose secrets, or change global settings without approval. Report changes, commands and actual verification results, including checks not run.
+</pre>
+<div class="actions"><button id="copy" type="button" disabled>Copy setup prompt</button><p class="status" id="status" role="status" aria-live="polite">Copy the text or open the plain-text prompt.</p><noscript><p>JavaScript is disabled. Select the prompt or use the plain-text link below.</p></noscript></div>
+</section>
+<p class="hint"><strong>How it works:</strong> Open your project in a coding agent with terminal access, paste the prompt, and review its proposed changes. The agent should adapt the setup to your environment; no agent host or successful installation is guaranteed.</p>
+</main>
+<footer><a href="https://github.com/darizae/alpaca-pipelines#readme">Documentation</a><a href="https://github.com/darizae/alpaca-pipelines#installation">Installation guide</a><a href="agent-setup.txt">Plain-text prompt</a><a href="https://github.com/darizae/alpaca-pipelines/issues">Report an issue</a></footer>
+</div>
+<script>const button=document.getElementById('copy');const prompt=document.getElementById('setup-prompt');const status=document.getElementById('status');button.disabled=false;button.addEventListener('click',async()=>{try{if(!navigator.clipboard||!window.isSecureContext)throw new Error('Clipboard unavailable');await navigator.clipboard.writeText(prompt.textContent);status.textContent='Copied. Paste into your coding agent.';}catch{const selection=window.getSelection();const range=document.createRange();range.selectNodeContents(prompt);selection.removeAllRanges();selection.addRange(range);prompt.focus({preventScroll:true});status.textContent='Prompt selected. Press Ctrl+C or Command+C to copy.';}});</script>
+</body>
+</html>
